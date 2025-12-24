@@ -216,7 +216,7 @@ I'm very grateful to acknowledge the dedicated team members who contributed to t
 
 ### Supervisors & Mentors
 
-Special thanks to our supervisors and mentors for their invaluable guidance:
+Special thanks to my mentor for his invaluable guidance:
 
 - **Dr. M. Rajasekaran / Associate Professor** - Academic Supervisor
 
