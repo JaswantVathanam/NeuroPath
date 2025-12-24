@@ -17,11 +17,11 @@
 
 ---
 
-## 📋 Overview
+## Overview
 
 **NeuroPath** is an innovative AI-powered web application designed for personalized cognitive rehabilitation and training. The platform helps individuals recovering from traumatic brain injuries (TBI), stroke, neurodegenerative disorders, or age-related cognitive decline through scientifically-grounded cognitive games and wellness activities.
 
-### 🎯 Key Highlights
+### Key Highlights
 
 - **AI-Powered Personalization** - Real-time difficulty adjustment based on user performance
 - **Privacy First** - All AI processing happens locally; no data sent to external servers
@@ -32,9 +32,9 @@
 
 ---
 
-## ✨ Features
+## Features
 
-### 🎮 Cognitive Games
+### Cognitive Games
 
 | Game | Cognitive Domain | Scientific Basis |
 |------|-----------------|------------------|
@@ -46,7 +46,7 @@
 | **Stroop Test** | Selective Attention | Stroop Effect (1935) |
 | **Dual Task** | Divided Attention | Resource Allocation Theory |
 
-### 🧘 Wellness Activities
+### Wellness Activities
 
 | Activity | Purpose |
 |----------|---------|
@@ -60,7 +60,7 @@
 | **Number Sequence** | Pattern recognition training |
 | **Sound Therapy** | Auditory relaxation & mindfulness |
 
-### 👥 User Roles
+### User Roles
 
 | Role | Capabilities |
 |------|-------------|
@@ -69,7 +69,7 @@
 
 ---
 
-## 🛠 Tech Stack
+## Tech Stack
 
 ### Backend
 - **.NET 10** - Latest .NET framework
@@ -92,7 +92,7 @@
 
 ---
 
-## 🤖 AI Integration
+## AI Integration
 
 ### Current Setup: LM Studio with Phi-4
 
@@ -103,7 +103,7 @@ The platform currently uses **LM Studio** to host the **Microsoft Phi-4** langua
 - **Fast Response** - 8-15 second feedback generation
 - **Offline Capable** - Works without internet connection
 
-### 🔄 Flexible AI Backend
+### Flexible AI Backend
 
 > **Important:** While we currently use LM Studio with Phi-4, the platform is designed to work with **any compatible SLM (Small Language Model) or LLM (Large Language Model)**!
 
@@ -143,7 +143,7 @@ private const string LM_STUDIO_ENDPOINT = "http://localhost:1234/v1/chat/complet
 
 ---
 
-## 🚀 Installation
+## Installation
 
 ### Prerequisites
 
@@ -202,7 +202,7 @@ Update `appsettings.json` for your environment:
 ---
 
 
-## 👨‍💻 Our Team
+## Our Team
 
 <div align="center">
 
@@ -225,7 +225,7 @@ Special thanks to our supervisors and mentors for their invaluable guidance:
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **Microsoft** - For .NET 10, Blazor, and the Phi-4 language model
 - **LM Studio** - For providing an excellent local AI hosting solution
@@ -235,7 +235,7 @@ Special thanks to our supervisors and mentors for their invaluable guidance:
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
@@ -247,7 +247,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
-## 📞 Contact
+## Contact
 
 For questions, feedback, or support, please open an issue on GitHub.
 
