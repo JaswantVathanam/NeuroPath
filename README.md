@@ -5,7 +5,7 @@
 ![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)
 ![Blazor Server](https://img.shields.io/badge/Blazor-Server-512BD4?style=for-the-badge&logo=blazor&logoColor=white)
 ![LM Studio](https://img.shields.io/badge/LM%20Studio-Compatible-00A4EF?style=for-the-badge&logo=ai&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+
 
 **AI-Powered Cognitive Training with Real-Time Personalization**
 
