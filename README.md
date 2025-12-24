@@ -208,7 +208,7 @@ Update `appsettings.json` for your environment:
 
 ### Development Team
 
-We are grateful to acknowledge the dedicated team members who contributed to the development of this platform:
+I'm very grateful to acknowledge the dedicated team members who contributed to the development of this platform:
 
 1. Rishika Ponnalagappan (https://github.com/Rishika057)
 2. Bhuvanan P (https://github.com/bhuvan0003)
@@ -218,8 +218,8 @@ We are grateful to acknowledge the dedicated team members who contributed to the
 
 Special thanks to our supervisors and mentors for their invaluable guidance:
 
-- **[Supervisor Name]** - Academic Supervisor
-- **[Co-Supervisor Name]** - Technical Mentor
+- **Dr. M. Rajasekaran / Associate Professor** - Academic Supervisor
+
 
 </div>
 
