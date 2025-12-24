@@ -1,0 +1,38 @@
+﻿Using launch settings from D:\VS Code Projects\CogRehab\Adaptive Cognitive Rehabilitation Platform\Properties\launchSettings.json...
+Building...
+
+======================================================================
+≡ƒöì CHECKING AI SERVER STATUS ON STARTUP...
+======================================================================
+info: AdaptiveCognitiveRehabilitationPlatform.Services.ServerStatusService[0]
+      Attempting to connect to Phi-4-mini on http://localhost:1234/v1/chat/completions...
+[STARTUP] ≡ƒôí Connecting to Phi-4-mini on http://localhost:1234/v1/chat/completions...
+info: System.Net.Http.HttpClient.Default.LogicalHandler[100]
+      Start processing HTTP request POST http://localhost:1234/v1/chat/completions
+info: System.Net.Http.HttpClient.Default.ClientHandler[100]
+      Sending HTTP request POST http://localhost:1234/v1/chat/completions
+info: System.Net.Http.HttpClient.Default.ClientHandler[101]
+      Received HTTP response headers after 3263.2214ms - 200
+info: System.Net.Http.HttpClient.Default.LogicalHandler[101]
+      End processing HTTP request after 3334.7683ms - 200
+[STARTUP] Γ£à SUCCESS! Phi-4-mini is ONLINE and responding!
+[STARTUP] ΓÅ▒∩╕Å  Response time: 3417ms
+[STARTUP] ≡ƒôì Endpoint: http://localhost:1234/v1/chat/completions
+[STARTUP] ≡ƒñû Model: Phi-4-mini
+[STARTUP] ≡ƒÆÜ AI auto-difficulty system is READY!
+======================================================================
+
+info: AdaptiveCognitiveRehabilitationPlatform.Services.ServerStatusService[0]
+      Γ£à Phi-4-mini server is ONLINE (response time: 3417ms)
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://localhost:5139
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Development
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: D:\VS Code Projects\CogRehab\Adaptive Cognitive Rehabilitation Platform
+warn: Microsoft.AspNetCore.HttpsPolicy.HttpsRedirectionMiddleware[3]
+      Failed to determine the https port for redirect.
+info: Microsoft.Hosting.Lifetime[0]
+      Application is shutting down...

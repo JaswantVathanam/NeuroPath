@@ -1,0 +1,1292 @@
+@page "/activities/story-recall"
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject AdaptiveCognitiveRehabilitationPlatform.Services.ActivityAIAnalysisService AIService
+
+<PageTitle>Story Recall - NeuroPath</PageTitle>
+
+<div class="activity-container">
+    <div class="activity-header">
+        <button class="back-btn" @onclick="GoBack">
+            <i class="bi bi-arrow-left"></i>
+        </button>
+        <div class="header-info">
+            <h1><i class="bi bi-book"></i> Story Recall</h1>
+            <p>Read stories and test your memory comprehension</p>
+        </div>
+        <div class="score-display">
+            <div class="score-item">
+                <i class="bi bi-trophy-fill"></i>
+                <span>@score / @totalQuestions</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="game-area">
+        @if (currentPhase == "select")
+        {
+            <div class="story-selection">
+                <h2>Choose a Story</h2>
+                @if (isLoadingAIRecommendation)
+                {
+                    <div class="ai-loading">
+                        <div class="ai-spinner"></div>
+                        <p>AI is analyzing your performance to recommend a story...</p>
+                    </div>
+                }
+                else if (!string.IsNullOrEmpty(aiRecommendation))
+                {
+                    <div class="ai-recommendation-banner">
+                        <div class="ai-badge">
+                            <i class="bi bi-robot"></i> AI Recommendation
+                        </div>
+                        <p>@aiRecommendation</p>
+                    </div>
+                }
+                else
+                {
+                    <p>Select a story to read and test your memory</p>
+                }
+                <div class="story-grid">
+                    @foreach (var story in stories)
+                    {
+                        <div class="story-card @(story.Title == recommendedStoryTitle ? "recommended" : "")" @onclick="() => SelectStory(story)">
+                            @if (story.Title == recommendedStoryTitle)
+                            {
+                                <div class="recommended-badge">
+                                    <i class="bi bi-stars"></i> AI Recommended
+                                </div>
+                            }
+                            <div class="story-icon">
+                                <i class="bi @story.Icon"></i>
+                            </div>
+                            <h3>@story.Title</h3>
+                            <div class="story-meta">
+                                <span><i class="bi bi-clock"></i> @story.ReadTime min read</span>
+                                <span><i class="bi bi-question-circle"></i> @story.Questions.Count questions</span>
+                            </div>
+                            <span class="difficulty @story.Difficulty.ToLower()">@story.Difficulty</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        else if (currentPhase == "reading")
+        {
+            <div class="reading-phase">
+                <div class="story-container">
+                    <div class="story-title-section">
+                        <h2>@selectedStory?.Title</h2>
+                        <span class="reading-timer">
+                            <i class="bi bi-clock"></i> @FormatTime(readingTimeLeft)
+                        </span>
+                    </div>
+                    <div class="story-content">
+                        @selectedStory?.Content
+                    </div>
+                    <div class="reading-progress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: @readingProgress%"></div>
+                        </div>
+                        <span>Take your time to read carefully</span>
+                    </div>
+                    <button class="ready-btn" @onclick="StartQuestions">
+                        <i class="bi bi-check-circle"></i> I'm Ready for Questions
+                    </button>
+                </div>
+            </div>
+        }
+        else if (currentPhase == "questions")
+        {
+            <div class="questions-phase">
+                <div class="question-progress">
+                    Question @(currentQuestionIndex + 1) of @selectedStory?.Questions.Count
+                </div>
+
+                <div class="question-card">
+                    <h3>@GetCurrentQuestion()?.Text</h3>
+                    <div class="options-list">
+                        @foreach (var option in GetCurrentQuestion()?.Options ?? new List<string>())
+                        {
+                            <button class="option-btn @GetOptionClass(option)"
+                                    @onclick="() => SelectAnswer(option)"
+                                    disabled="@(selectedAnswer != null)">
+                                @option
+                            </button>
+                        }
+                    </div>
+
+                    @if (selectedAnswer != null)
+                    {
+                        <div class="feedback-section @(isCorrect ? "correct" : "incorrect")">
+                            @if (isCorrect)
+                            {
+                                <i class="bi bi-check-circle-fill"></i>
+                                <span>Correct! Well done!</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-x-circle-fill"></i>
+                                <span>The correct answer was: @GetCurrentQuestion()?.CorrectAnswer</span>
+                            }
+                        </div>
+
+                        <button class="next-btn" @onclick="NextQuestion">
+                            @if (currentQuestionIndex < selectedStory?.Questions.Count - 1)
+                            {
+                                <span>Next Question</span>
+                                <i class="bi bi-arrow-right"></i>
+                            }
+                            else
+                            {
+                                <span>See Results</span>
+                                <i class="bi bi-trophy"></i>
+                            }
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+        else if (currentPhase == "results")
+        {
+            <div class="results-phase">
+                <div class="results-card">
+                    <div class="results-icon @GetResultClass()">
+                        <i class="bi @GetResultIcon()"></i>
+                    </div>
+                    <h2>@GetResultMessage()</h2>
+                    <div class="score-circle">
+                        <span class="score-value">@score</span>
+                        <span class="score-total">/ @totalQuestions</span>
+                    </div>
+                    <div class="accuracy-bar">
+                        <div class="accuracy-fill" style="width: @accuracy%"></div>
+                    </div>
+                    <span class="accuracy-text">@accuracy% Accuracy</span>
+
+                    @if (isLoadingAIFeedback)
+                    {
+                        <div class="ai-analysis-loading">
+                            <div class="ai-spinner"></div>
+                            <p>AI is analyzing your performance...</p>
+                        </div>
+                    }
+                    else if (aiAnalysis != null)
+                    {
+                        <div class="ai-analysis-card">
+                            <div class="ai-analysis-header">
+                                <i class="bi bi-robot"></i>
+                                <span>AI Performance Analysis</span>
+                            </div>
+                            <div class="ai-analysis-content">
+                                <div class="ai-encouragement">
+                                    <i class="bi bi-heart-fill"></i>
+                                    <p>@aiAnalysis.Encouragement</p>
+                                </div>
+                                <div class="ai-insights">
+                                    <h4><i class="bi bi-lightbulb"></i> Insights</h4>
+                                    <p>@aiAnalysis.PatternAnalysis</p>
+                                </div>
+                                @if (!string.IsNullOrEmpty(aiAnalysis.RecommendedNextDifficulty))
+                                {
+                                    <div class="ai-recommendation">
+                                        <i class="bi bi-arrow-up-circle"></i>
+                                        <span>Next: Try a <strong>@aiAnalysis.RecommendedNextDifficulty</strong> story</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <div class="result-stats">
+                        <div class="result-stat">
+                            <i class="bi bi-check-circle text-success"></i>
+                            <span>@score Correct</span>
+                        </div>
+                        <div class="result-stat">
+                            <i class="bi bi-x-circle text-danger"></i>
+                            <span>@(totalQuestions - score) Incorrect</span>
+                        </div>
+                    </div>
+
+                    <div class="result-actions">
+                        <button class="action-btn primary" @onclick="TryAgain">
+                            <i class="bi bi-arrow-repeat"></i> Try Again
+                        </button>
+                        <button class="action-btn secondary" @onclick="ChooseNewStory">
+                            <i class="bi bi-book"></i> New Story
+                        </button>
+                        <button class="action-btn tertiary" @onclick="GoBack">
+                            <i class="bi bi-grid"></i> All Activities
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string currentPhase = "select";
+    private Story? selectedStory;
+    private int currentQuestionIndex = 0;
+    private string? selectedAnswer;
+    private bool isCorrect = false;
+    private int score = 0;
+    private int totalQuestions = 0;
+    private int accuracy = 0;
+    private int readingTimeLeft = 120;
+    private int readingProgress = 0;
+    private System.Timers.Timer? timer;
+    
+    // User info from localStorage
+    private int userId = 0;
+    private string username = "";
+    
+    // AI Integration
+    private bool isLoadingAIRecommendation = false;
+    private bool isLoadingAIFeedback = false;
+    private string? aiRecommendation;
+    private string? recommendedStoryTitle;
+    private ActivityAIResult? aiAnalysis;
+
+    private class ActivityAIResult
+    {
+        public string Encouragement { get; set; } = "";
+        public string PatternAnalysis { get; set; } = "";
+        public string RecommendedNextDifficulty { get; set; } = "";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var userIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+                var usernameStr = await JS.InvokeAsync<string>("localStorage.getItem", "username");
+                
+                if (!string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out var parsedId))
+                {
+                    userId = parsedId;
+                }
+                username = usernameStr ?? "";
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading user info: {ex.Message}");
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAIStoryRecommendation();
+    }
+
+    private async Task LoadAIStoryRecommendation()
+    {
+        isLoadingAIRecommendation = true;
+        StateHasChanged();
+
+        try
+        {
+            var recommendation = await AIService.GetStoryRecommendationAsync(1);
+            if (recommendation != null)
+            {
+                aiRecommendation = recommendation.Message;
+                recommendedStoryTitle = recommendation.RecommendedDifficulty switch
+                {
+                    "easy" => "The Mountain Journey",
+                    "medium" => "The Bakery Mystery",
+                    "hard" => "The Space Mission",
+                    _ => null
+                };
+            }
+        }
+        catch
+        {
+            // Silently fail - AI recommendation is optional
+        }
+        finally
+        {
+            isLoadingAIRecommendation = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAIFeedback()
+    {
+        isLoadingAIFeedback = true;
+        StateHasChanged();
+
+        try
+        {
+            var session = new AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession
+            {
+                UserId = 1,
+                ActivityType = "StoryRecall",
+                StartTime = DateTime.UtcNow.AddMinutes(-5),
+                EndTime = DateTime.UtcNow,
+                DurationSeconds = 5 * 60,
+                Score = score * 20,
+                Accuracy = (decimal)accuracy,
+                Difficulty = selectedStory?.Difficulty?.ToLower() ?? "medium",
+                ActivityData = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    storyTitle = selectedStory?.Title ?? "Unknown",
+                    storyDifficulty = selectedStory?.Difficulty ?? "Unknown",
+                    totalQuestions = totalQuestions,
+                    correctAnswers = score,
+                    questionsAnswered = currentQuestionIndex + 1
+                })
+            };
+
+            var analysis = await AIService.AnalyzeActivityPerformanceAsync(session, new List<AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession>());
+            if (analysis != null)
+            {
+                aiAnalysis = new ActivityAIResult
+                {
+                    Encouragement = analysis.Encouragement,
+                    PatternAnalysis = analysis.PatternAnalysis,
+                    RecommendedNextDifficulty = analysis.RecommendedNextDifficulty
+                };
+            }
+        }
+        catch
+        {
+            aiAnalysis = new ActivityAIResult
+            {
+                Encouragement = accuracy >= 70 ? "Great job with this story! Your reading comprehension is impressive!" : "Keep practicing! Every story helps build your memory.",
+                PatternAnalysis = $"You scored {score}/{totalQuestions} on a {selectedStory?.Difficulty?.ToLower()} story.",
+                RecommendedNextDifficulty = accuracy >= 80 ? GetNextDifficulty() : selectedStory?.Difficulty ?? "medium"
+            };
+        }
+        finally
+        {
+            isLoadingAIFeedback = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetNextDifficulty()
+    {
+        return selectedStory?.Difficulty?.ToLower() switch
+        {
+            "easy" => "Medium",
+            "medium" => "Hard",
+            "hard" => "Hard",
+            _ => "Medium"
+        };
+    }
+
+    private List<Story> stories = new()
+    {
+        new Story
+        {
+            Title = "The Mountain Journey",
+            Icon = "bi-geo-alt",
+            ReadTime = 2,
+            Difficulty = "Easy",
+            Content = "Emma decided to climb Mount Verde on a sunny Saturday morning. She packed her blue backpack with water, sandwiches, and a camera. The trail started at Oak Valley and wound through a dense forest of pine trees. After hiking for two hours, she reached a clearing with a beautiful lake called Mirror Pond. A family of deer was drinking at the water's edge. Emma took many photos before continuing her journey. At noon, she reached the summit and could see three towns in the valley below. She ate her lunch while watching eagles soar overhead. On the way down, she met a hiker named Tom who was carrying a guitar. They walked together and Tom played folk songs until they reached the parking lot at 4 PM.",
+            Questions = new List<Question>
+            {
+                new Question { Text = "What day did Emma decide to climb the mountain?", Options = new List<string> { "Sunday", "Saturday", "Friday", "Monday" }, CorrectAnswer = "Saturday" },
+                new Question { Text = "What color was Emma's backpack?", Options = new List<string> { "Red", "Green", "Blue", "Black" }, CorrectAnswer = "Blue" },
+                new Question { Text = "What was the name of the lake?", Options = new List<string> { "Crystal Lake", "Mirror Pond", "Echo Lake", "Silver Pool" }, CorrectAnswer = "Mirror Pond" },
+                new Question { Text = "What animals did Emma see at the lake?", Options = new List<string> { "Bears", "Rabbits", "Deer", "Foxes" }, CorrectAnswer = "Deer" },
+                new Question { Text = "What instrument was Tom carrying?", Options = new List<string> { "Violin", "Guitar", "Flute", "Harmonica" }, CorrectAnswer = "Guitar" }
+            }
+        },
+        new Story
+        {
+            Title = "The Bakery Mystery",
+            Icon = "bi-shop",
+            ReadTime = 3,
+            Difficulty = "Medium",
+            Content = "Mrs. Chen's bakery on Maple Street was famous for its cinnamon rolls. Every morning at 6 AM, the aroma would drift three blocks away. On Tuesday, something unusual happened. When Mrs. Chen arrived at 5 AM to prepare the dough, she found the back door unlocked. Inside, she discovered that someone had eaten exactly seven cinnamon rolls from the batch she'd made the night before. Nothing else was touched or stolen. Detective Rivera came to investigate and found small, floury paw prints leading to the basement. There, curled up in a box of flour, was a orange tabby cat with cinnamon crumbs on its whiskers. The cat had squeezed through a ventilation grate. Mrs. Chen adopted the cat and named him Cinnamon. She installed a cat door and now Cinnamon greets customers every day, though he's only allowed one roll per week.",
+            Questions = new List<Question>
+            {
+                new Question { Text = "What street was the bakery on?", Options = new List<string> { "Oak Street", "Maple Street", "Pine Street", "Cedar Street" }, CorrectAnswer = "Maple Street" },
+                new Question { Text = "What time did Mrs. Chen usually arrive?", Options = new List<string> { "4 AM", "5 AM", "6 AM", "7 AM" }, CorrectAnswer = "5 AM" },
+                new Question { Text = "How many cinnamon rolls were eaten?", Options = new List<string> { "Five", "Six", "Seven", "Eight" }, CorrectAnswer = "Seven" },
+                new Question { Text = "What color was the cat?", Options = new List<string> { "Black", "White", "Gray", "Orange" }, CorrectAnswer = "Orange" },
+                new Question { Text = "What did Mrs. Chen name the cat?", Options = new List<string> { "Maple", "Cinnamon", "Sugar", "Ginger" }, CorrectAnswer = "Cinnamon" },
+                new Question { Text = "What did the detective find in the bakery?", Options = new List<string> { "Money", "Paw prints", "A note", "Broken glass" }, CorrectAnswer = "Paw prints" }
+            }
+        },
+        new Story
+        {
+            Title = "The Space Mission",
+            Icon = "bi-rocket",
+            ReadTime = 3,
+            Difficulty = "Hard",
+            Content = "The Artemis VII mission launched from Kennedy Space Center on March 15th at exactly 9:47 AM. Commander Sarah Park led a crew of five astronauts on humanity's first journey to Europa, Jupiter's icy moon. The spacecraft, named Odyssey, traveled for 2.3 years before reaching its destination. Dr. James Wong, the mission biologist, was the first to spot the dark streaks on the ice that might indicate water beneath the surface. The team deployed three research drones named Alpha, Beta, and Gamma. Beta discovered a vent releasing warm water vapor near the equator. After 47 days on Europa, the crew collected 156 ice core samples. Mission specialist Dr. Elena Costa analyzed the samples and found complex organic molecules. Before departure, Commander Park planted a titanium plaque commemorating the mission. The crew returned to Earth on November 3rd, landing in the Pacific Ocean near Hawaii.",
+            Questions = new List<Question>
+            {
+                new Question { Text = "What was the name of the spacecraft?", Options = new List<string> { "Apollo", "Endeavor", "Odyssey", "Voyager" }, CorrectAnswer = "Odyssey" },
+                new Question { Text = "How long did the journey to Europa take?", Options = new List<string> { "1.5 years", "2.3 years", "3.1 years", "4.2 years" }, CorrectAnswer = "2.3 years" },
+                new Question { Text = "How many astronauts were in the crew?", Options = new List<string> { "Four", "Five", "Six", "Seven" }, CorrectAnswer = "Five" },
+                new Question { Text = "Which drone found the warm water vent?", Options = new List<string> { "Alpha", "Beta", "Gamma", "Delta" }, CorrectAnswer = "Beta" },
+                new Question { Text = "How many ice core samples were collected?", Options = new List<string> { "126", "146", "156", "166" }, CorrectAnswer = "156" },
+                new Question { Text = "Who was the mission biologist?", Options = new List<string> { "Sarah Park", "James Wong", "Elena Costa", "Mark Chen" }, CorrectAnswer = "James Wong" },
+                new Question { Text = "Where did the crew land upon return?", Options = new List<string> { "Atlantic Ocean", "Pacific Ocean", "Indian Ocean", "Gulf of Mexico" }, CorrectAnswer = "Pacific Ocean" }
+            }
+        }
+    };
+
+    private class Story
+    {
+        public string Title { get; set; } = "";
+        public string Icon { get; set; } = "";
+        public int ReadTime { get; set; }
+        public string Difficulty { get; set; } = "";
+        public string Content { get; set; } = "";
+        public List<Question> Questions { get; set; } = new();
+    }
+
+    private class Question
+    {
+        public string Text { get; set; } = "";
+        public List<string> Options { get; set; } = new();
+        public string CorrectAnswer { get; set; } = "";
+    }
+
+    private void SelectStory(Story story)
+    {
+        selectedStory = story;
+        currentPhase = "reading";
+        readingTimeLeft = story.ReadTime * 60;
+        StartReadingTimer();
+    }
+
+    private void StartReadingTimer()
+    {
+        timer?.Stop();
+        timer?.Dispose();
+
+        var totalTime = readingTimeLeft;
+        timer = new System.Timers.Timer(1000);
+        timer.Elapsed += async (s, e) =>
+        {
+            readingTimeLeft--;
+            readingProgress = (int)(((double)(totalTime - readingTimeLeft) / totalTime) * 100);
+            
+            await InvokeAsync(StateHasChanged);
+        };
+        timer.Start();
+    }
+
+    private void StartQuestions()
+    {
+        timer?.Stop();
+        timer?.Dispose();
+        currentPhase = "questions";
+        currentQuestionIndex = 0;
+        score = 0;
+        totalQuestions = selectedStory?.Questions.Count ?? 0;
+        selectedAnswer = null;
+    }
+
+    private Question? GetCurrentQuestion()
+    {
+        if (selectedStory == null || currentQuestionIndex >= selectedStory.Questions.Count)
+            return null;
+        return selectedStory.Questions[currentQuestionIndex];
+    }
+
+    private void SelectAnswer(string answer)
+    {
+        if (selectedAnswer != null) return;
+        
+        selectedAnswer = answer;
+        isCorrect = answer == GetCurrentQuestion()?.CorrectAnswer;
+        if (isCorrect) score++;
+    }
+
+    private string GetOptionClass(string option)
+    {
+        if (selectedAnswer == null) return "";
+        if (option == GetCurrentQuestion()?.CorrectAnswer) return "correct";
+        if (option == selectedAnswer && !isCorrect) return "incorrect";
+        return "faded";
+    }
+
+    private async Task NextQuestion()
+    {
+        if (currentQuestionIndex < (selectedStory?.Questions.Count ?? 0) - 1)
+        {
+            currentQuestionIndex++;
+            selectedAnswer = null;
+        }
+        else
+        {
+            accuracy = totalQuestions > 0 ? (int)((double)score / totalQuestions * 100) : 0;
+            currentPhase = "results";
+            _ = Task.Run(async () =>
+            {
+                await LoadAIFeedback();
+            });
+            await SaveActivitySession();
+        }
+    }
+
+    private async Task SaveActivitySession()
+    {
+        try
+        {
+            var activityData = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                storyTitle = selectedStory?.Title ?? "Unknown",
+                storyDifficulty = selectedStory?.Difficulty ?? "Unknown",
+                totalQuestions = totalQuestions,
+                correctAnswers = score,
+                readingTimeSeconds = selectedStory?.ReadTime ?? 0 * 60
+            });
+
+            var session = new
+            {
+                userId = userId,
+                username = username,
+                activityType = "StoryRecall",
+                activityName = "Story Recall",
+                durationSeconds = 300,
+                score = score * 20,
+                accuracy = (decimal)accuracy,
+                completionPercentage = 100,
+                difficulty = selectedStory?.Difficulty?.ToLower() ?? "medium",
+                activityData = activityData,
+                moodBefore = "",
+                moodAfter = ""
+            };
+
+            var apiUrl = $"{Navigation.BaseUri}api/activities/save";
+            await Http.PostAsJsonAsync(apiUrl, session);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to save activity session: {ex.Message}");
+        }
+    }
+
+    private string GetResultClass()
+    {
+        if (accuracy >= 80) return "excellent";
+        if (accuracy >= 60) return "good";
+        return "needs-practice";
+    }
+
+    private string GetResultIcon()
+    {
+        if (accuracy >= 80) return "bi-trophy-fill";
+        if (accuracy >= 60) return "bi-emoji-smile";
+        return "bi-emoji-neutral";
+    }
+
+    private string GetResultMessage()
+    {
+        if (accuracy >= 80) return "Excellent Memory!";
+        if (accuracy >= 60) return "Good Job!";
+        return "Keep Practicing!";
+    }
+
+    private void TryAgain()
+    {
+        currentPhase = "reading";
+        readingTimeLeft = selectedStory!.ReadTime * 60;
+        readingProgress = 0;
+        StartReadingTimer();
+    }
+
+    private void ChooseNewStory()
+    {
+        currentPhase = "select";
+        selectedStory = null;
+    }
+
+    private string FormatTime(int seconds)
+    {
+        var mins = seconds / 60;
+        var secs = seconds % 60;
+        return $"{mins}:{secs:D2}";
+    }
+
+    private void GoBack()
+    {
+        timer?.Stop();
+        timer?.Dispose();
+        Navigation.NavigateTo("/games");
+    }
+
+    public void Dispose()
+    {
+        timer?.Stop();
+        timer?.Dispose();
+    }
+}
+
+<style>
+    .activity-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+    }
+
+    .activity-header {
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: white;
+        padding: 1.5rem 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .back-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        border: 2px solid rgba(255,255,255,0.3);
+        background: rgba(255,255,255,0.1);
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        transition: all 200ms;
+    }
+
+    .back-btn:hover {
+        background: rgba(255,255,255,0.2);
+    }
+
+    .header-info {
+        flex-grow: 1;
+    }
+
+    .header-info h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .header-info p {
+        margin: 0.25rem 0 0;
+        opacity: 0.9;
+        font-size: 0.9rem;
+    }
+
+    .score-display .score-item {
+        background: rgba(255,255,255,0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .game-area {
+        max-width: 800px;
+        margin: 2rem auto;
+        padding: 0 1.5rem;
+    }
+
+    .story-selection {
+        text-align: center;
+    }
+
+    .story-selection h2 {
+        color: #5b21b6;
+        margin: 0 0 0.5rem;
+    }
+
+    .story-selection > p {
+        color: #6b7280;
+        margin-bottom: 2rem;
+    }
+
+    .story-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .story-card {
+        background: white;
+        border-radius: 20px;
+        padding: 2rem;
+        cursor: pointer;
+        transition: all 300ms;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        position: relative;
+    }
+
+    .story-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 40px rgba(139, 92, 246, 0.2);
+    }
+
+    .story-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1rem;
+        font-size: 2rem;
+        color: white;
+    }
+
+    .story-card h3 {
+        margin: 0 0 0.75rem;
+        color: #1f2937;
+    }
+
+    .story-meta {
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        color: #6b7280;
+        font-size: 0.875rem;
+        margin-bottom: 1rem;
+    }
+
+    .story-meta span {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .difficulty {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        padding: 0.375rem 0.75rem;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .difficulty.easy {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .difficulty.medium {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .difficulty.hard {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .reading-phase {
+        background: white;
+        border-radius: 24px;
+        overflow: hidden;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+
+    .story-container {
+        padding: 2rem;
+    }
+
+    .story-title-section {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid #f3f4f6;
+    }
+
+    .story-title-section h2 {
+        margin: 0;
+        color: #5b21b6;
+    }
+
+    .reading-timer {
+        background: #ede9fe;
+        color: #7c3aed;
+        padding: 0.5rem 1rem;
+        border-radius: 10px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .story-content {
+        font-size: 1.125rem;
+        line-height: 1.8;
+        color: #374151;
+        margin-bottom: 2rem;
+    }
+
+    .reading-progress {
+        margin-bottom: 1.5rem;
+    }
+
+    .progress-bar {
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 0.5rem;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #8b5cf6, #7c3aed);
+        transition: width 200ms;
+    }
+
+    .reading-progress span {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .ready-btn {
+        width: 100%;
+        padding: 1rem;
+        font-size: 1.125rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: white;
+        border: none;
+        border-radius: 16px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 300ms;
+    }
+
+    .ready-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 30px rgba(139, 92, 246, 0.4);
+    }
+
+    .questions-phase {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .question-progress {
+        text-align: center;
+        color: #7c3aed;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+    }
+
+    .question-card {
+        background: white;
+        border-radius: 24px;
+        padding: 2rem;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+
+    .question-card h3 {
+        margin: 0 0 1.5rem;
+        color: #1f2937;
+        font-size: 1.25rem;
+    }
+
+    .options-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .option-btn {
+        padding: 1rem 1.5rem;
+        background: #f9fafb;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        font-family: inherit;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 200ms;
+        text-align: left;
+    }
+
+    .option-btn:hover:not(:disabled) {
+        border-color: #8b5cf6;
+        background: #ede9fe;
+    }
+
+    .option-btn.correct {
+        border-color: #10b981;
+        background: #ecfdf5;
+        color: #047857;
+    }
+
+    .option-btn.incorrect {
+        border-color: #ef4444;
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+    .option-btn.faded {
+        opacity: 0.5;
+    }
+
+    .option-btn:disabled {
+        cursor: default;
+    }
+
+    .feedback-section {
+        padding: 1rem;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        font-weight: 600;
+    }
+
+    .feedback-section.correct {
+        background: #ecfdf5;
+        color: #047857;
+    }
+
+    .feedback-section.incorrect {
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+    .feedback-section i {
+        font-size: 1.5rem;
+    }
+
+    .next-btn {
+        width: 100%;
+        padding: 1rem;
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-family: inherit;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .next-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(139, 92, 246, 0.3);
+    }
+
+    .results-phase {
+        display: flex;
+        justify-content: center;
+    }
+
+    .results-card {
+        background: white;
+        border-radius: 24px;
+        padding: 3rem;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        max-width: 450px;
+        width: 100%;
+    }
+
+    .results-icon {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 3rem;
+        color: white;
+    }
+
+    .results-icon.excellent {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+
+    .results-icon.good {
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    }
+
+    .results-icon.needs-practice {
+        background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+    }
+
+    .results-card h2 {
+        margin: 0 0 1.5rem;
+        color: #1f2937;
+    }
+
+    .score-circle {
+        margin-bottom: 1rem;
+    }
+
+    .score-value {
+        font-size: 4rem;
+        font-weight: 800;
+        color: #8b5cf6;
+    }
+
+    .score-total {
+        font-size: 2rem;
+        color: #9ca3af;
+    }
+
+    .accuracy-bar {
+        height: 12px;
+        background: #e5e7eb;
+        border-radius: 6px;
+        overflow: hidden;
+        margin-bottom: 0.5rem;
+    }
+
+    .accuracy-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #8b5cf6, #7c3aed);
+        transition: width 500ms ease-out;
+    }
+
+    .accuracy-text {
+        font-weight: 600;
+        color: #7c3aed;
+    }
+
+    .result-stats {
+        display: flex;
+        justify-content: center;
+        gap: 2rem;
+        margin: 2rem 0;
+    }
+
+    .result-stat {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: #4b5563;
+    }
+
+    .text-success {
+        color: #10b981;
+    }
+
+    .text-danger {
+        color: #ef4444;
+    }
+
+    .result-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .action-btn {
+        padding: 1rem;
+        border-radius: 12px;
+        font-family: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .action-btn.primary {
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: white;
+        border: none;
+    }
+
+    .action-btn.primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(139, 92, 246, 0.3);
+    }
+
+    .action-btn.secondary {
+        background: #ede9fe;
+        color: #7c3aed;
+        border: none;
+    }
+
+    .action-btn.tertiary {
+        background: white;
+        border: 2px solid #e5e7eb;
+        color: #6b7280;
+    }
+
+    /* AI Integration Styles */
+    .ai-loading, .ai-analysis-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        padding: 2rem;
+        color: #6b7280;
+    }
+
+    .ai-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #e5e7eb;
+        border-top-color: #8b5cf6;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .ai-recommendation-banner {
+        background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+        border: 2px solid #8b5cf6;
+        border-radius: 16px;
+        padding: 1.25rem;
+        margin-bottom: 2rem;
+        text-align: left;
+    }
+
+    .ai-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: white;
+        padding: 0.375rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+    }
+
+    .ai-recommendation-banner p {
+        margin: 0;
+        color: #4c1d95;
+        font-size: 0.95rem;
+        line-height: 1.5;
+    }
+
+    .story-card.recommended {
+        border: 3px solid #8b5cf6;
+        background: linear-gradient(135deg, #faf5ff 0%, #ede9fe 100%);
+    }
+
+    .recommended-badge {
+        position: absolute;
+        top: -12px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: white;
+        padding: 0.375rem 1rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+    }
+
+    .ai-analysis-card {
+        background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+        border: 2px solid #10b981;
+        border-radius: 16px;
+        margin: 1.5rem 0;
+        overflow: hidden;
+    }
+
+    .ai-analysis-header {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        padding: 0.75rem 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+    }
+
+    .ai-analysis-content {
+        padding: 1.25rem;
+    }
+
+    .ai-encouragement {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #bbf7d0;
+    }
+
+    .ai-encouragement i {
+        color: #ef4444;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+    }
+
+    .ai-encouragement p {
+        margin: 0;
+        color: #166534;
+        font-size: 0.95rem;
+        line-height: 1.5;
+    }
+
+    .ai-insights h4 {
+        margin: 0 0 0.5rem;
+        color: #166534;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.9rem;
+    }
+
+    .ai-insights p {
+        margin: 0 0 1rem;
+        color: #15803d;
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+
+    .ai-recommendation {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: #d1fae5;
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        color: #047857;
+        font-size: 0.9rem;
+    }
+
+    .ai-recommendation i {
+        font-size: 1.25rem;
+    }
+
+    @@media (max-width: 640px) {
+        .story-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>

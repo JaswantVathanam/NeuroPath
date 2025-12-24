@@ -1,0 +1,422 @@
+@page "/user-dashboard"
+@using NeuroPath.Services
+@using System.Net.Http.Json
+@using Microsoft.JSInterop
+@using System.Text.Json
+@implements IAsyncDisposable
+@implements IDisposable
+@inject AuthService AuthService
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h1>🎮 My Learning Progress</h1>
+        <p class="greeting">Welcome! Here's your progress and assigned tasks.</p>
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger">
+                ⚠️ @errorMessage
+                <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="() => errorMessage = null">Dismiss</button>
+            </div>
+        }
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading-section">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p>Loading your progress...</p>
+            <div class="skeleton-loader">
+                <div class="skeleton-item"></div>
+                <div class="skeleton-item"></div>
+                <div class="skeleton-item"></div>
+            </div>
+        </div>
+    }
+    else if (userProgress == null)
+    {
+        <div class="empty-state">
+            <p>No progress recorded yet.</p>
+            <p class="text-muted">Start playing games to see your progress here!</p>
+            <a href="/games" class="btn btn-primary mt-2">Go to Games</a>
+        </div>
+    }
+    else
+    {
+        <div class="progress-section">
+            <div class="progress-card">
+                <div class="progress-item">
+                    <span class="progress-label">Total Sessions Completed:</span>
+                    <span class="progress-value">@userProgress.TotalSessions</span>
+                </div>
+            </div>
+
+            <div class="progress-card">
+                <div class="progress-item">
+                    <span class="progress-label">Average Accuracy:</span>
+                    <span class="progress-value">@($"{userProgress.AverageAccuracy:F1}%")</span>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" style="width: @($"{Math.Min(userProgress.AverageAccuracy, 100)}%")"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="progress-card">
+                <div class="progress-item">
+                    <span class="progress-label">Last Session:</span>
+                    <span class="progress-value">@(userProgress.LastSessionDate?.ToString("MMM dd, yyyy") ?? "No sessions yet")</span>
+                </div>
+            </div>
+
+            <div class="progress-card">
+                <div class="progress-item">
+                    <span class="progress-label">Active Assigned Tasks:</span>
+                    <span class="progress-value">@userProgress.ActiveAssignments</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="action-section">
+            <a href="/games" class="btn btn-primary btn-lg">▶️ Play Games</a>
+            <a href="/sessions" class="btn btn-outline-secondary btn-lg">📊 View Sessions</a>
+        </div>
+    }
+
+    <div class="dashboard-footer">
+        <button class="btn btn-outline-secondary" @onclick="RefreshData">🔄 Refresh Now</button>
+        <p class="auto-refresh-info">Auto-refreshing every 30 seconds...</p>
+    </div>
+</div>
+
+@code {
+    private UserProgressDto? userProgress;
+    private bool isLoading = true;
+    private string? errorMessage = null;
+    private CancellationTokenSource? cts;
+    private bool isDisposed = false;
+    private System.Timers.Timer? refreshTimer;
+
+    private class UserProgressDto
+    {
+        public int TotalSessions { get; set; }
+        public double AverageAccuracy { get; set; }
+        public DateTime? LastSessionDate { get; set; }
+        public int ActiveAssignments { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await AuthService.InitializeAsync();
+            
+            // Verify user is authenticated and is a User/Student
+            var currentUser = await AuthService.GetCurrentUserAsync();
+            if (!currentUser.IsAuthenticated || currentUser.UserType != "User")
+            {
+                NavigationManager.NavigateTo("/login");
+                return;
+            }
+
+            await LoadProgressData();
+
+            // Set up auto-refresh timer (30 seconds)
+            if (!isDisposed)
+            {
+                refreshTimer = new System.Timers.Timer(30000);
+                refreshTimer.Elapsed += async (s, e) =>
+                {
+                    if (!isDisposed)
+                    {
+                        await LoadProgressData();
+                        await InvokeAsync(StateHasChanged);
+                    }
+                };
+                refreshTimer.AutoReset = true;
+                refreshTimer.Start();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Initialization error: {ex.Message}";
+        }
+    }
+
+    private async Task LoadProgressData()
+    {
+        if (isDisposed) return;
+
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+
+            cts = new CancellationTokenSource(TimeSpan.FromSeconds(10)); // 10 second timeout
+            cts.Token.Register(() =>
+            {
+                if (!isDisposed)
+                {
+                    errorMessage = "Request timed out. Please try again.";
+                    isLoading = false;
+                }
+            });
+
+            // Get current user ID from AuthService
+            var currentUser = await AuthService.GetCurrentUserAsync();
+            if (currentUser?.UserId > 0)
+            {
+                var response = await HttpClient.GetAsync($"/api/progress/user/{currentUser.UserId}", HttpCompletionOption.ResponseContentRead, cts.Token);
+
+                if (isDisposed) return;
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var jsonString = await response.Content.ReadAsStringAsync(cts.Token);
+                    userProgress = JsonSerializer.Deserialize<UserProgressDto>(jsonString);
+                    errorMessage = null;
+                }
+                else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    errorMessage = "Your session has expired. Please log in again.";
+                    NavigationManager.NavigateTo("/login");
+                }
+                else
+                {
+                    // If 404, just show empty state (no sessions yet)
+                    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    {
+                        userProgress = null;
+                    }
+                    else
+                    {
+                        errorMessage = $"Failed to load progress data (HTTP {response.StatusCode})";
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (!isDisposed)
+                errorMessage = "Request timed out. Please check your connection.";
+        }
+        catch (HttpRequestException ex)
+        {
+            if (!isDisposed)
+                errorMessage = $"Network error: {ex.Message}";
+        }
+        catch (JSDisconnectedException)
+        {
+            isDisposed = true;
+            return;
+        }
+        catch (Exception ex)
+        {
+            if (!isDisposed)
+                errorMessage = $"Error loading data: {ex.Message}";
+        }
+        finally
+        {
+            if (!isDisposed)
+                isLoading = false;
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadProgressData();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        isDisposed = true;
+        if (refreshTimer != null)
+        {
+            refreshTimer.Stop();
+            refreshTimer.Dispose();
+        }
+        cts?.Cancel();
+        cts?.Dispose();
+    }
+
+    public void Dispose()
+    {
+        isDisposed = true;
+        refreshTimer?.Stop();
+        refreshTimer?.Dispose();
+        cts?.Cancel();
+        cts?.Dispose();
+    }
+}
+
+<style>
+    .dashboard-container {
+        padding: 2rem;
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    .dashboard-header {
+        margin-bottom: 2rem;
+    }
+
+    .dashboard-header h1 {
+        font-size: 2rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .greeting {
+        color: #6c757d;
+        font-size: 1.1rem;
+    }
+
+    .alert {
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .loading-section {
+        text-align: center;
+        padding: 3rem 2rem;
+    }
+
+    .spinner-border {
+        display: inline-block;
+        width: 3rem;
+        height: 3rem;
+        margin-bottom: 1rem;
+    }
+
+    .skeleton-loader {
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+        justify-content: center;
+    }
+
+    .skeleton-item {
+        width: 250px;
+        height: 120px;
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: loading 1.5s infinite;
+        border-radius: 0.5rem;
+    }
+
+    @@keyframes loading {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 2rem;
+        background: #f8f9fa;
+        border-radius: 0.5rem;
+    }
+
+    .empty-state p {
+        font-size: 1.1rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .progress-section {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .progress-card {
+        background: linear-gradient(135deg, #e7f3ff 0%, #f0f8ff 100%);
+        border: 1px solid #b3d9ff;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    }
+
+    .progress-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .progress-label {
+        font-size: 0.9rem;
+        color: #495057;
+        font-weight: 500;
+    }
+
+    .progress-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #0056b3;
+    }
+
+    .progress-bar-container {
+        width: 100%;
+        height: 0.5rem;
+        background: #e9ecef;
+        border-radius: 0.25rem;
+        overflow: hidden;
+        margin-top: 0.5rem;
+    }
+
+    .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
+        transition: width 0.3s ease;
+    }
+
+    .action-section {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        margin-bottom: 2rem;
+    }
+
+    .action-section .btn {
+        padding: 0.75rem 2rem;
+        font-size: 1rem;
+    }
+
+    .dashboard-footer {
+        text-align: center;
+        padding: 2rem;
+        border-top: 1px solid #dee2e6;
+    }
+
+    .dashboard-footer .btn {
+        margin-right: 1rem;
+    }
+
+    .auto-refresh-info {
+        color: #6c757d;
+        font-size: 0.875rem;
+        margin-top: 1rem;
+    }
+
+    @@media (max-width: 768px) {
+        .dashboard-container {
+            padding: 1rem;
+        }
+
+        .dashboard-header h1 {
+            font-size: 1.5rem;
+        }
+
+        .action-section {
+            flex-direction: column;
+        }
+
+        .action-section .btn {
+            width: 100%;
+        }
+    }
+</style>

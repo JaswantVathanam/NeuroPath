@@ -1,0 +1,1470 @@
+@page "/games/stroop-test"
+@using Microsoft.AspNetCore.Components.Web
+@using Adaptive_Cognitive_Rehabilitation_Platform.Components
+@using AdaptiveCognitiveRehabilitationPlatform.Services
+@using NeuroPath.Models
+@using AdaptiveCognitiveRehabilitationPlatform.Services.GameAnalytics
+@inject ILogger<StroopTest> Logger
+@inject GameStatisticsService StatsService
+@inject GameAiAnalysisService AiService
+@inject IGameSessionRepository SessionRepository
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Stroop Test - NeuroPath</PageTitle>
+
+<div class="stroop-container">
+    @if (!gameStarted)
+    {
+        <!-- Level Selection Screen -->
+        <div class="stroop-setup">
+            <div class="stroop-header">
+                <i class="bi bi-palette-fill"></i>
+                <h1>Stroop Test</h1>
+                <p>Test your selective attention and cognitive control!</p>
+            </div>
+
+            <div class="stroop-explanation">
+                <div class="explanation-card">
+                    <i class="bi bi-info-circle"></i>
+                    <h3>How It Works</h3>
+                    <p>You'll see color words displayed in different ink colors. Your task is to identify the <strong>INK COLOR</strong>, not the word itself!</p>
+                    <div class="example-box">
+                        <span class="example-word" style="color: #22c55e;">RED</span>
+                        <span class="example-arrow">→</span>
+                        <span class="example-answer">Answer: GREEN</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stroop-modes">
+                <h3>Select Mode</h3>
+                <div class="mode-buttons">
+                    <button class="mode-btn @(selectedMode == "congruent" ? "active" : "")" 
+                            @onclick='() => SelectMode("congruent")'>
+                        <i class="bi bi-check-circle"></i>
+                        <strong>Practice</strong>
+                        <small>Word matches color (easier)</small>
+                    </button>
+                    <button class="mode-btn @(selectedMode == "incongruent" ? "active" : "")" 
+                            @onclick='() => SelectMode("incongruent")'>
+                        <i class="bi bi-shuffle"></i>
+                        <strong>Classic</strong>
+                        <small>Word differs from color</small>
+                    </button>
+                    <button class="mode-btn @(selectedMode == "mixed" ? "active" : "")" 
+                            @onclick='() => SelectMode("mixed")'>
+                        <i class="bi bi-lightning"></i>
+                        <strong>Mixed</strong>
+                        <small>Random congruent/incongruent</small>
+                    </button>
+                </div>
+            </div>
+
+            <div class="stroop-levels">
+                <h3>Select Difficulty</h3>
+                <div class="level-buttons">
+                    <button class="level-btn @(selectedLevel == 1 ? "active" : "")" 
+                            @onclick="() => SelectLevel(1)">
+                        <i class="bi bi-1-circle"></i>
+                        <strong>Easy</strong>
+                        <small>10 trials • 5 sec each</small>
+                    </button>
+                    <button class="level-btn @(selectedLevel == 2 ? "active" : "")" 
+                            @onclick="() => SelectLevel(2)">
+                        <i class="bi bi-2-circle"></i>
+                        <strong>Medium</strong>
+                        <small>15 trials • 3 sec each</small>
+                    </button>
+                    <button class="level-btn @(selectedLevel == 3 ? "active" : "")" 
+                            @onclick="() => SelectLevel(3)">
+                        <i class="bi bi-3-circle"></i>
+                        <strong>Hard</strong>
+                        <small>20 trials • 2 sec each</small>
+                    </button>
+                </div>
+            </div>
+
+            <button class="start-btn" @onclick="StartGame">
+                <i class="bi bi-play-fill"></i>
+                Start Test
+            </button>
+        </div>
+    }
+    else if (!gameEnded)
+    {
+        <!-- Game Screen -->
+        <div class="stroop-game">
+            <div class="game-hud">
+                <div class="hud-item">
+                    <i class="bi bi-bullseye"></i>
+                    <span>Trial @currentTrial / @totalTrials</span>
+                </div>
+                <div class="hud-item correct">
+                    <i class="bi bi-check-circle-fill"></i>
+                    <span>@correctAnswers Correct</span>
+                </div>
+                <div class="hud-item errors">
+                    <i class="bi bi-x-circle-fill"></i>
+                    <span>@errors Errors</span>
+                </div>
+                <div class="hud-item timer">
+                    <i class="bi bi-stopwatch"></i>
+                    <span>@FormatTime(elapsedSeconds)</span>
+                </div>
+            </div>
+
+            <div class="stroop-display">
+                @if (showingStimulus)
+                {
+                    <div class="stimulus-container @(showFeedback ? feedbackClass : "")">
+                        @if (showFeedback)
+                        {
+                            <div class="feedback-overlay">
+                                <i class="bi @(lastAnswerCorrect ? "bi-check-circle-fill" : "bi-x-circle-fill")"></i>
+                                <span>@(lastAnswerCorrect ? "Correct!" : $"Wrong! It was {correctColorName}")</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="word-display" style="color: @currentInkColor;">
+                                @currentWord
+                            </div>
+                            <div class="trial-timer">
+                                <div class="timer-bar" style="width: @(trialTimePercent)%;"></div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="ready-prompt">
+                        <i class="bi bi-eye"></i>
+                        <span>Get Ready...</span>
+                    </div>
+                }
+            </div>
+
+            <div class="color-buttons">
+                <p class="instruction">Click the INK COLOR of the word above:</p>
+                <div class="button-grid">
+                    @foreach (var color in colorOptions)
+                    {
+                        <button class="color-btn" 
+                                style="background-color: @color.Hex;"
+                                @onclick="() => SelectColor(color.Name)"
+                                disabled="@(!showingStimulus || showFeedback)">
+                            @color.Name
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Results Screen -->
+        <div class="stroop-results">
+            <div class="results-header @GetPerformanceClass()">
+                <div class="results-icon">
+                    <i class="bi @GetPerformanceIcon()"></i>
+                </div>
+                <h1>@GetPerformanceTitle()</h1>
+                <p>@GetPerformanceSubtitle()</p>
+            </div>
+
+            <div class="results-stats">
+                <div class="stat-card primary">
+                    <i class="bi bi-percent"></i>
+                    <div class="stat-value">@accuracy.ToString("F0")%</div>
+                    <div class="stat-label">Accuracy</div>
+                </div>
+                <div class="stat-card">
+                    <i class="bi bi-check-circle"></i>
+                    <div class="stat-value">@correctAnswers / @totalTrials</div>
+                    <div class="stat-label">Correct</div>
+                </div>
+                <div class="stat-card">
+                    <i class="bi bi-lightning"></i>
+                    <div class="stat-value">@avgReactionTime.ToString("F0")ms</div>
+                    <div class="stat-label">Avg Response</div>
+                </div>
+                <div class="stat-card">
+                    <i class="bi bi-clock"></i>
+                    <div class="stat-value">@FormatTime(elapsedSeconds)</div>
+                    <div class="stat-label">Total Time</div>
+                </div>
+            </div>
+
+            <div class="stroop-effect-display">
+                <h3><i class="bi bi-graph-up"></i> Stroop Effect Analysis</h3>
+                <div class="effect-stats">
+                    @if (congruentTrials > 0 && incongruentTrials > 0)
+                    {
+                        <div class="effect-item">
+                            <span class="effect-label">Congruent Avg:</span>
+                            <span class="effect-value congruent">@avgCongruentTime.ToString("F0")ms</span>
+                        </div>
+                        <div class="effect-item">
+                            <span class="effect-label">Incongruent Avg:</span>
+                            <span class="effect-value incongruent">@avgIncongruentTime.ToString("F0")ms</span>
+                        </div>
+                        <div class="effect-item highlight">
+                            <span class="effect-label">Stroop Effect:</span>
+                            <span class="effect-value">@stroopEffect.ToString("F0")ms</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="no-effect">Play Mixed mode to see Stroop Effect analysis!</p>
+                    }
+                </div>
+            </div>
+
+            <!-- AI Analysis Section -->
+            @if (aiAnalyzing)
+            {
+                <div class="ai-analysis-loading">
+                    <div class="ai-spinner"></div>
+                    <p>AI is analyzing your performance...</p>
+                </div>
+            }
+            else if (_aiResponse != null)
+            {
+                <div class="ai-analysis-card">
+                    <div class="ai-header">
+                        <i class="bi bi-robot"></i>
+                        <h3>AI Analysis</h3>
+                    </div>
+                    <div class="ai-content">
+                        <div class="ai-message encouragement">
+                            <i class="bi bi-star-fill"></i>
+                            <p>@_aiResponse.Encouragement</p>
+                        </div>
+                        @if (!string.IsNullOrEmpty(_aiResponse.FunMessage))
+                        {
+                            <div class="ai-message fun">
+                                <i class="bi bi-emoji-smile"></i>
+                                <p>@_aiResponse.FunMessage</p>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(_aiResponse.EffortNote))
+                        {
+                            <div class="ai-message effort">
+                                <i class="bi bi-heart-fill"></i>
+                                <p>@_aiResponse.EffortNote</p>
+                            </div>
+                        }
+                        <div class="ai-recommendation">
+                            <span class="rec-label">Recommended Next Level:</span>
+                            <span class="rec-value">Level @_aiResponse.NextDifficultyLevel</span>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <div class="results-actions">
+                <button class="action-btn primary" @onclick="PlayAgain">
+                    <i class="bi bi-arrow-repeat"></i>
+                    Play Again
+                </button>
+                <button class="action-btn secondary" @onclick="GoToGames">
+                    <i class="bi bi-grid"></i>
+                    All Games
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    // Game state
+    private bool gameStarted = false;
+    private bool gameEnded = false;
+    private string selectedMode = "incongruent";
+    private int selectedLevel = 1;
+    
+    // Trial state
+    private int currentTrial = 0;
+    private int totalTrials = 10;
+    private bool showingStimulus = false;
+    private bool showFeedback = false;
+    private string currentWord = "";
+    private string currentInkColor = "";
+    private string currentInkColorName = "";
+    private bool isCongruent = false;
+    private string correctColorName = "";
+    private bool lastAnswerCorrect = false;
+    private string feedbackClass = "";
+    private double trialTimePercent = 100;
+    private int trialTimeMs = 5000;
+    
+    // Scoring
+    private int correctAnswers = 0;
+    private int errors = 0;
+    private double accuracy = 0;
+    private double avgReactionTime = 0;
+    private List<double> reactionTimes = new();
+    private List<double> congruentTimes = new();
+    private List<double> incongruentTimes = new();
+    private int congruentTrials = 0;
+    private int incongruentTrials = 0;
+    private double avgCongruentTime = 0;
+    private double avgIncongruentTime = 0;
+    private double stroopEffect = 0;
+    
+    // Timing
+    private int elapsedSeconds = 0;
+    private DateTime gameStartTime;
+    private DateTime trialStartTime;
+    private System.Threading.Timer? gameTimer;
+    private System.Threading.Timer? trialTimer;
+    
+    // User
+    private int currentUserId = 1;
+    private string currentUsername = "Player";
+    
+    // AI
+    private bool aiAnalyzing = false;
+    private GameAiAnalysisService.AiAnalysisResponse? _aiResponse;
+    private GameSessionResult? _gameSessionResult;
+    
+    // Random
+    private Random random = new();
+    
+    // Color definitions
+    private List<ColorOption> colorOptions = new()
+    {
+        new ColorOption { Name = "RED", Hex = "#ef4444" },
+        new ColorOption { Name = "BLUE", Hex = "#3b82f6" },
+        new ColorOption { Name = "GREEN", Hex = "#22c55e" },
+        new ColorOption { Name = "YELLOW", Hex = "#eab308" },
+        new ColorOption { Name = "PURPLE", Hex = "#a855f7" },
+        new ColorOption { Name = "ORANGE", Hex = "#f97316" }
+    };
+    
+    private class ColorOption
+    {
+        public string Name { get; set; } = "";
+        public string Hex { get; set; } = "";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var userIdStr = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "userId");
+            var username = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "username");
+            
+            if (int.TryParse(userIdStr, out int userId) && userId > 0)
+            {
+                currentUserId = userId;
+            }
+            if (!string.IsNullOrEmpty(username))
+            {
+                currentUsername = username;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogWarning($"Could not get user from localStorage: {ex.Message}");
+        }
+    }
+
+    private void SelectMode(string mode)
+    {
+        selectedMode = mode;
+    }
+
+    private void SelectLevel(int level)
+    {
+        selectedLevel = level;
+        totalTrials = level switch
+        {
+            1 => 10,
+            2 => 15,
+            3 => 20,
+            _ => 10
+        };
+        trialTimeMs = level switch
+        {
+            1 => 5000,
+            2 => 3000,
+            3 => 2000,
+            _ => 5000
+        };
+    }
+
+    private async Task StartGame()
+    {
+        gameStarted = true;
+        gameEnded = false;
+        currentTrial = 0;
+        correctAnswers = 0;
+        errors = 0;
+        reactionTimes.Clear();
+        congruentTimes.Clear();
+        incongruentTimes.Clear();
+        congruentTrials = 0;
+        incongruentTrials = 0;
+        elapsedSeconds = 0;
+        
+        gameStartTime = DateTime.UtcNow;
+        
+        // Start game timer
+        gameTimer = new System.Threading.Timer(async _ =>
+        {
+            elapsedSeconds++;
+            await InvokeAsync(StateHasChanged);
+        }, null, 1000, 1000);
+        
+        await ShowNextTrial();
+    }
+
+    private async Task ShowNextTrial()
+    {
+        currentTrial++;
+        
+        if (currentTrial > totalTrials)
+        {
+            await EndGame();
+            return;
+        }
+        
+        showingStimulus = false;
+        showFeedback = false;
+        StateHasChanged();
+        
+        // Brief pause before showing stimulus
+        await Task.Delay(500);
+        
+        GenerateStimulus();
+        showingStimulus = true;
+        trialTimePercent = 100;
+        trialStartTime = DateTime.Now;
+        StateHasChanged();
+        
+        // Start trial timer
+        StartTrialTimer();
+    }
+
+    private void GenerateStimulus()
+    {
+        // Determine if this trial should be congruent or incongruent
+        isCongruent = selectedMode switch
+        {
+            "congruent" => true,
+            "incongruent" => false,
+            "mixed" => random.Next(2) == 0,
+            _ => false
+        };
+        
+        // Pick a random word (color name)
+        var wordIndex = random.Next(colorOptions.Count);
+        currentWord = colorOptions[wordIndex].Name;
+        
+        if (isCongruent)
+        {
+            // Ink color matches the word
+            currentInkColor = colorOptions[wordIndex].Hex;
+            currentInkColorName = colorOptions[wordIndex].Name;
+            congruentTrials++;
+        }
+        else
+        {
+            // Ink color differs from the word
+            var inkIndex = wordIndex;
+            while (inkIndex == wordIndex)
+            {
+                inkIndex = random.Next(colorOptions.Count);
+            }
+            currentInkColor = colorOptions[inkIndex].Hex;
+            currentInkColorName = colorOptions[inkIndex].Name;
+            incongruentTrials++;
+        }
+        
+        correctColorName = currentInkColorName;
+    }
+
+    private void StartTrialTimer()
+    {
+        var timerInterval = 50; // Update every 50ms
+        var totalTicks = trialTimeMs / timerInterval;
+        var currentTick = 0;
+        
+        trialTimer?.Dispose();
+        trialTimer = new System.Threading.Timer(async _ =>
+        {
+            currentTick++;
+            trialTimePercent = Math.Max(0, 100 - (currentTick * 100.0 / totalTicks));
+            
+            if (currentTick >= totalTicks)
+            {
+                trialTimer?.Dispose();
+                await InvokeAsync(() => TimeoutTrial());
+            }
+            else
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        }, null, timerInterval, timerInterval);
+    }
+
+    private async Task TimeoutTrial()
+    {
+        if (showFeedback) return;
+        
+        // Time ran out - count as error
+        errors++;
+        lastAnswerCorrect = false;
+        feedbackClass = "wrong";
+        showFeedback = true;
+        StateHasChanged();
+        
+        await Task.Delay(1000);
+        await ShowNextTrial();
+    }
+
+    private async Task SelectColor(string colorName)
+    {
+        if (!showingStimulus || showFeedback) return;
+        
+        trialTimer?.Dispose();
+        
+        var reactionTime = (DateTime.Now - trialStartTime).TotalMilliseconds;
+        reactionTimes.Add(reactionTime);
+        
+        // Track congruent vs incongruent times for Stroop Effect
+        if (isCongruent)
+            congruentTimes.Add(reactionTime);
+        else
+            incongruentTimes.Add(reactionTime);
+        
+        // Check if correct
+        lastAnswerCorrect = colorName.Equals(currentInkColorName, StringComparison.OrdinalIgnoreCase);
+        
+        if (lastAnswerCorrect)
+        {
+            correctAnswers++;
+            feedbackClass = "correct";
+        }
+        else
+        {
+            errors++;
+            feedbackClass = "wrong";
+        }
+        
+        showFeedback = true;
+        StateHasChanged();
+        
+        await Task.Delay(800);
+        await ShowNextTrial();
+    }
+
+    private async Task EndGame()
+    {
+        gameEnded = true;
+        gameTimer?.Dispose();
+        trialTimer?.Dispose();
+        
+        // Calculate final stats
+        accuracy = totalTrials > 0 ? (correctAnswers * 100.0 / totalTrials) : 0;
+        avgReactionTime = reactionTimes.Any() ? reactionTimes.Average() : 0;
+        
+        // Calculate Stroop Effect
+        avgCongruentTime = congruentTimes.Any() ? congruentTimes.Average() : 0;
+        avgIncongruentTime = incongruentTimes.Any() ? incongruentTimes.Average() : 0;
+        stroopEffect = avgIncongruentTime - avgCongruentTime;
+        
+        StateHasChanged();
+        
+        // Save session
+        await SaveGameSession();
+        
+        // AI Analysis
+        await AnalyzeGameWithAI();
+    }
+
+    private async Task SaveGameSession()
+    {
+        try
+        {
+            int score = (int)(accuracy * 10 + Math.Max(0, 1000 - avgReactionTime) / 10);
+            
+            _gameSessionResult = StatsService.CalculateStatistics(
+                "StroopTest",
+                selectedLevel,
+                totalTrials,
+                totalTrials,
+                correctAnswers,
+                errors,
+                elapsedSeconds,
+                gameStartTime,
+                DateTime.UtcNow
+            );
+            _gameSessionResult.OverallScore = score;
+            
+            // Save to repository
+            var session = new GameSession
+            {
+                UserId = currentUserId,
+                ProfileId = currentUserId,
+                GameType = "StroopTest",
+                GameMode = selectedMode,
+                Difficulty = selectedLevel,
+                Status = "Completed",
+                TimeStarted = gameStartTime,
+                TimeCompleted = DateTime.UtcNow,
+                TotalSeconds = elapsedSeconds,
+                TotalMoves = totalTrials,
+                CorrectMatches = correctAnswers,
+                TotalPairs = totalTrials,
+                Accuracy = (decimal)accuracy,
+                PerformanceScore = score,
+                EfficiencyScore = (decimal)accuracy,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                Notes = $"Stroop Test - {selectedMode} Mode - Level {selectedLevel} - {errors} errors, Avg RT: {avgReactionTime:F0}ms"
+            };
+            
+            await SessionRepository.CreateSessionAsync(session);
+            Logger?.LogInformation($"Stroop Test session saved for user {currentUserId}");
+            
+            // Also save via API
+            try
+            {
+                var request = new
+                {
+                    UserId = currentUserId,
+                    Username = currentUsername,
+                    GameType = "StroopTest",
+                    GameMode = selectedMode,
+                    DifficultyLevel = selectedLevel,
+                    Score = score,
+                    Accuracy = accuracy,
+                    TotalMoves = totalTrials,
+                    CorrectMoves = correctAnswers,
+                    ErrorCount = errors,
+                    Duration = elapsedSeconds,
+                    AverageReactionTimeMs = avgReactionTime,
+                    CompletedSuccessfully = true,
+                    StartTime = gameStartTime,
+                    EndTime = DateTime.UtcNow
+                };
+
+                var apiUrl = $"{NavigationManager.BaseUri}api/game/save-session";
+                await Http.PostAsJsonAsync(apiUrl, request);
+                Logger?.LogInformation($"Stroop Test session saved via API for user {currentUserId}");
+            }
+            catch (Exception apiEx)
+            {
+                Logger?.LogWarning($"Failed to save via API: {apiEx.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"Failed to save game session: {ex.Message}");
+        }
+    }
+
+    private async Task AnalyzeGameWithAI()
+    {
+        aiAnalyzing = true;
+        StateHasChanged();
+
+        try
+        {
+            _aiResponse = await AiService.AnalyzeGamePerformanceAsync(
+                _gameSessionResult ?? new GameSessionResult(),
+                currentUsername,
+                0
+            );
+
+            Logger?.LogInformation($"AI Analysis complete for Stroop Test");
+
+            // Autosave with AI feedback
+            await AutosaveGameResultAsync(_aiResponse);
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"AI Analysis failed: {ex.Message}");
+            _aiResponse = new GameAiAnalysisService.AiAnalysisResponse
+            {
+                Encouragement = "Great job completing the Stroop Test! Your brain is getting stronger!",
+                FunMessage = "Colors can be tricky, but you handled it well! 🎨",
+                EffortNote = "Keep practicing to improve your selective attention!",
+                PerformanceScore = (int)accuracy,
+                NextDifficultyLevel = accuracy >= 80 ? Math.Min(selectedLevel + 1, 3) : selectedLevel,
+                Confidence = 0.7
+            };
+        }
+        finally
+        {
+            aiAnalyzing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AutosaveGameResultAsync(GameAiAnalysisService.AiAnalysisResponse? aiResponse)
+    {
+        try
+        {
+            var autosaveRequest = new
+            {
+                UserId = currentUserId,
+                Username = currentUsername,
+                GameType = "StroopTest",
+                GameMode = selectedMode,
+                DifficultyLevel = selectedLevel,
+                Score = (int)(_gameSessionResult?.OverallScore ?? 0),
+                Accuracy = accuracy,
+                Duration = elapsedSeconds,
+                TotalMoves = totalTrials,
+                CorrectMoves = correctAnswers,
+                ErrorCount = errors,
+                AverageReactionTimeMs = avgReactionTime,
+                StroopEffect = stroopEffect,
+                CongruentAvgTime = avgCongruentTime,
+                IncongruentAvgTime = avgIncongruentTime,
+                Encouragement = aiResponse?.Encouragement ?? "",
+                FunMessage = aiResponse?.FunMessage ?? "",
+                EffortNote = aiResponse?.EffortNote ?? "",
+                AiPerformanceScore = aiResponse?.PerformanceScore ?? 0,
+                AiNextDifficultyLevel = aiResponse?.NextDifficultyLevel ?? selectedLevel,
+                AiConfidence = aiResponse?.Confidence ?? 0,
+                Timestamp = DateTime.UtcNow
+            };
+
+            var autosaveUrl = $"{NavigationManager.BaseUri}api/json-stats/save";
+            await Http.PostAsJsonAsync(autosaveUrl, autosaveRequest);
+            Logger?.LogInformation("Stroop Test result autosaved with AI feedback");
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogWarning($"Failed to autosave result: {ex.Message}");
+        }
+    }
+
+    private string GetDifficultyName() => selectedLevel switch
+    {
+        1 => "Easy",
+        2 => "Medium",
+        3 => "Hard",
+        _ => "Unknown"
+    };
+
+    private string GetPerformanceClass()
+    {
+        if (accuracy >= 90) return "excellent";
+        if (accuracy >= 70) return "good";
+        if (accuracy >= 50) return "fair";
+        return "needs-work";
+    }
+
+    private string GetPerformanceIcon()
+    {
+        if (accuracy >= 90) return "bi-trophy-fill";
+        if (accuracy >= 70) return "bi-star-fill";
+        if (accuracy >= 50) return "bi-hand-thumbs-up-fill";
+        return "bi-emoji-smile";
+    }
+
+    private string GetPerformanceTitle()
+    {
+        if (accuracy >= 90) return "Outstanding!";
+        if (accuracy >= 70) return "Great Job!";
+        if (accuracy >= 50) return "Good Effort!";
+        return "Keep Practicing!";
+    }
+
+    private string GetPerformanceSubtitle()
+    {
+        if (accuracy >= 90) return "Your selective attention is excellent!";
+        if (accuracy >= 70) return "You're showing strong cognitive control!";
+        if (accuracy >= 50) return "Your brain is learning to filter distractions!";
+        return "Every attempt makes your brain stronger!";
+    }
+
+    private string FormatTime(int seconds)
+    {
+        var mins = seconds / 60;
+        var secs = seconds % 60;
+        return $"{mins}:{secs:D2}";
+    }
+
+    private async Task PlayAgain()
+    {
+        gameStarted = false;
+        gameEnded = false;
+        _aiResponse = null;
+        StateHasChanged();
+    }
+
+    private void GoToGames()
+    {
+        NavigationManager.NavigateTo("/games");
+    }
+
+    public void Dispose()
+    {
+        gameTimer?.Dispose();
+        trialTimer?.Dispose();
+    }
+}
+
+<style>
+    /* ========== Container ========== */
+    .stroop-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 50%, #fbbf24 100%);
+        padding: 2rem;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    /* ========== Setup Screen ========== */
+    .stroop-setup {
+        max-width: 800px;
+        margin: 0 auto;
+        text-align: center;
+    }
+
+    .stroop-header {
+        margin-bottom: 2rem;
+    }
+
+    .stroop-header i {
+        font-size: 4rem;
+        color: #d97706;
+        margin-bottom: 1rem;
+        display: block;
+    }
+
+    .stroop-header h1 {
+        font-size: 2.5rem;
+        color: #92400e;
+        margin: 0 0 0.5rem 0;
+    }
+
+    .stroop-header p {
+        color: #a16207;
+        font-size: 1.1rem;
+    }
+
+    /* Explanation Card */
+    .stroop-explanation {
+        margin-bottom: 2rem;
+    }
+
+    .explanation-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+
+    .explanation-card i {
+        font-size: 2rem;
+        color: #3b82f6;
+        margin-bottom: 0.5rem;
+    }
+
+    .explanation-card h3 {
+        color: #1f2937;
+        margin: 0 0 0.5rem 0;
+    }
+
+    .explanation-card p {
+        color: #6b7280;
+        margin: 0;
+    }
+
+    .example-box {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        margin-top: 1rem;
+        padding: 1rem;
+        background: #f3f4f6;
+        border-radius: 12px;
+    }
+
+    .example-word {
+        font-size: 2rem;
+        font-weight: 800;
+    }
+
+    .example-arrow {
+        font-size: 1.5rem;
+        color: #9ca3af;
+    }
+
+    .example-answer {
+        font-size: 1.1rem;
+        color: #059669;
+        font-weight: 600;
+    }
+
+    /* Mode & Level Selection */
+    .stroop-modes, .stroop-levels {
+        margin-bottom: 2rem;
+    }
+
+    .stroop-modes h3, .stroop-levels h3 {
+        color: #92400e;
+        margin-bottom: 1rem;
+    }
+
+    .mode-buttons, .level-buttons {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .mode-btn, .level-btn {
+        background: white;
+        border: 3px solid transparent;
+        border-radius: 16px;
+        padding: 1.5rem;
+        min-width: 160px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .mode-btn:hover, .level-btn:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+
+    .mode-btn.active, .level-btn.active {
+        border-color: #d97706;
+        background: #fffbeb;
+    }
+
+    .mode-btn i, .level-btn i {
+        font-size: 2rem;
+        color: #d97706;
+    }
+
+    .mode-btn strong, .level-btn strong {
+        font-size: 1.1rem;
+        color: #1f2937;
+    }
+
+    .mode-btn small, .level-btn small {
+        color: #6b7280;
+        font-size: 0.85rem;
+    }
+
+    /* Start Button */
+    .start-btn {
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        color: white;
+        border: none;
+        border-radius: 50px;
+        padding: 1rem 3rem;
+        font-size: 1.25rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(217, 119, 6, 0.4);
+    }
+
+    .start-btn:hover {
+        transform: scale(1.05);
+        box-shadow: 0 6px 25px rgba(217, 119, 6, 0.5);
+    }
+
+    /* ========== Game Screen ========== */
+    .stroop-game {
+        max-width: 700px;
+        margin: 0 auto;
+    }
+
+    .game-hud {
+        display: flex;
+        justify-content: center;
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+    }
+
+    .hud-item {
+        background: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 50px;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .hud-item i {
+        color: #d97706;
+    }
+
+    .hud-item.correct i { color: #22c55e; }
+    .hud-item.errors i { color: #ef4444; }
+    .hud-item.timer i { color: #3b82f6; }
+
+    /* Stimulus Display */
+    .stroop-display {
+        background: white;
+        border-radius: 24px;
+        padding: 3rem;
+        margin-bottom: 2rem;
+        min-height: 250px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+    }
+
+    .stimulus-container {
+        text-align: center;
+        width: 100%;
+    }
+
+    .word-display {
+        font-size: 5rem;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        animation: wordAppear 0.3s ease-out;
+    }
+
+    @@keyframes wordAppear {
+        from { transform: scale(0.5); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+
+    .trial-timer {
+        margin-top: 1.5rem;
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .timer-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #22c55e, #eab308, #ef4444);
+        transition: width 0.05s linear;
+    }
+
+    .ready-prompt {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        color: #9ca3af;
+    }
+
+    .ready-prompt i {
+        font-size: 3rem;
+        animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @@keyframes pulse {
+        0%, 100% { opacity: 0.5; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.1); }
+    }
+
+    /* Feedback */
+    .stimulus-container.correct {
+        background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+        border-radius: 16px;
+        padding: 2rem;
+    }
+
+    .stimulus-container.wrong {
+        background: linear-gradient(135deg, #fee2e2, #fecaca);
+        border-radius: 16px;
+        padding: 2rem;
+    }
+
+    .feedback-overlay {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .feedback-overlay i {
+        font-size: 4rem;
+    }
+
+    .stimulus-container.correct .feedback-overlay i { color: #22c55e; }
+    .stimulus-container.wrong .feedback-overlay i { color: #ef4444; }
+
+    .feedback-overlay span {
+        font-size: 1.5rem;
+        font-weight: 600;
+    }
+
+    /* Color Buttons */
+    .color-buttons {
+        text-align: center;
+    }
+
+    .color-buttons .instruction {
+        color: #92400e;
+        font-weight: 600;
+        margin-bottom: 1rem;
+    }
+
+    .button-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        max-width: 450px;
+        margin: 0 auto;
+    }
+
+    .color-btn {
+        padding: 1rem;
+        border: none;
+        border-radius: 12px;
+        color: white;
+        font-size: 1.1rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+
+    .color-btn:hover:not(:disabled) {
+        transform: scale(1.05);
+        box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+    }
+
+    .color-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* ========== Results Screen ========== */
+    .stroop-results {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .results-header {
+        text-align: center;
+        padding: 3rem 2rem;
+        border-radius: 24px;
+        margin-bottom: 2rem;
+        color: white;
+    }
+
+    .results-header.excellent { background: linear-gradient(135deg, #22c55e, #16a34a); }
+    .results-header.good { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+    .results-header.fair { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    .results-header.needs-work { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+
+    .results-icon i {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+    }
+
+    .results-header h1 {
+        font-size: 2.5rem;
+        margin: 0 0 0.5rem 0;
+    }
+
+    .results-header p {
+        font-size: 1.1rem;
+        opacity: 0.9;
+        margin: 0;
+    }
+
+    /* Stats Cards */
+    .results-stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        text-align: center;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+
+    .stat-card i {
+        font-size: 1.5rem;
+        color: #d97706;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-card.primary {
+        background: linear-gradient(135deg, #fef3c7, #fde68a);
+    }
+
+    .stat-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .stat-label {
+        font-size: 0.85rem;
+        color: #6b7280;
+        margin-top: 0.25rem;
+    }
+
+    /* Stroop Effect Analysis */
+    .stroop-effect-display {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+
+    .stroop-effect-display h3 {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: #1f2937;
+        margin: 0 0 1rem 0;
+    }
+
+    .stroop-effect-display h3 i {
+        color: #d97706;
+    }
+
+    .effect-stats {
+        display: flex;
+        gap: 2rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .effect-item {
+        text-align: center;
+    }
+
+    .effect-label {
+        display: block;
+        font-size: 0.85rem;
+        color: #6b7280;
+        margin-bottom: 0.25rem;
+    }
+
+    .effect-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+
+    .effect-value.congruent { color: #22c55e; }
+    .effect-value.incongruent { color: #ef4444; }
+    .effect-item.highlight .effect-value { color: #d97706; }
+
+    .no-effect {
+        color: #9ca3af;
+        font-style: italic;
+        text-align: center;
+        margin: 0;
+    }
+
+    /* AI Analysis */
+    .ai-analysis-loading {
+        background: white;
+        border-radius: 16px;
+        padding: 2rem;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .ai-spinner {
+        width: 50px;
+        height: 50px;
+        border: 4px solid #e5e7eb;
+        border-top-color: #d97706;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+    }
+
+    @@keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .ai-analysis-card {
+        background: white;
+        border-radius: 16px;
+        overflow: hidden;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+
+    .ai-header {
+        background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+        color: white;
+        padding: 1rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .ai-header i {
+        font-size: 1.5rem;
+    }
+
+    .ai-header h3 {
+        margin: 0;
+    }
+
+    .ai-content {
+        padding: 1.5rem;
+    }
+
+    .ai-message {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: 1rem;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+    }
+
+    .ai-message i {
+        font-size: 1.25rem;
+        margin-top: 0.25rem;
+    }
+
+    .ai-message p {
+        margin: 0;
+        line-height: 1.5;
+    }
+
+    .ai-message.encouragement {
+        background: #fef3c7;
+    }
+    .ai-message.encouragement i { color: #d97706; }
+
+    .ai-message.fun {
+        background: #dbeafe;
+    }
+    .ai-message.fun i { color: #3b82f6; }
+
+    .ai-message.effort {
+        background: #fce7f3;
+    }
+    .ai-message.effort i { color: #ec4899; }
+
+    .ai-recommendation {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        background: #f3f4f6;
+        border-radius: 12px;
+    }
+
+    .rec-label {
+        color: #6b7280;
+    }
+
+    .rec-value {
+        font-weight: 700;
+        color: #7c3aed;
+    }
+
+    /* Action Buttons */
+    .results-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+    }
+
+    .action-btn {
+        padding: 1rem 2rem;
+        border: none;
+        border-radius: 50px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+    }
+
+    .action-btn.primary {
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        color: white;
+        box-shadow: 0 4px 15px rgba(217, 119, 6, 0.4);
+    }
+
+    .action-btn.primary:hover {
+        transform: scale(1.05);
+    }
+
+    .action-btn.secondary {
+        background: white;
+        color: #4b5563;
+        border: 2px solid #e5e7eb;
+    }
+
+    .action-btn.secondary:hover {
+        border-color: #d97706;
+        color: #d97706;
+    }
+
+    /* ========== Responsive ========== */
+    @@media (max-width: 768px) {
+        .stroop-container {
+            padding: 1rem;
+        }
+
+        .stroop-header h1 {
+            font-size: 2rem;
+        }
+
+        .mode-buttons, .level-buttons {
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .mode-btn, .level-btn {
+            width: 100%;
+            max-width: 280px;
+        }
+
+        .word-display {
+            font-size: 3rem;
+        }
+
+        .button-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .results-stats {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .effect-stats {
+            flex-direction: column;
+            gap: 1rem;
+        }
+    }
+</style>

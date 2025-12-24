@@ -1,0 +1,1203 @@
+@page "/activities/focus-tracker"
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject ActivityAIAnalysisService AIService
+
+<PageTitle>Focus Tracker - NeuroPath</PageTitle>
+
+<div class="activity-container">
+    <div class="activity-header">
+        <button class="back-btn" @onclick="GoBack">
+            <i class="bi bi-arrow-left"></i>
+        </button>
+        <div class="header-info">
+            <h1><i class="bi bi-eye"></i> Focus Tracker</h1>
+            <p>Track moving objects to improve visual attention</p>
+        </div>
+        <div class="score-display">
+            <div class="score-item">
+                <i class="bi bi-bullseye"></i>
+                <span>@score</span>
+            </div>
+            <div class="score-item">
+                <i class="bi bi-speedometer2"></i>
+                <span>Level @level</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="game-area">
+        @if (!gameStarted)
+        {
+            <div class="start-screen">
+                <div class="focus-icon">
+                    <i class="bi bi-eye"></i>
+                </div>
+                <h2>Focus Tracker</h2>
+                <p>Track the highlighted objects as they move and swap positions!</p>
+
+                <div class="instructions">
+                    <div class="instruction-item">
+                        <span class="step">1</span>
+                        <span>Watch the highlighted balls carefully</span>
+                    </div>
+                    <div class="instruction-item">
+                        <span class="step">2</span>
+                        <span>Track them as they move and swap</span>
+                    </div>
+                    <div class="instruction-item">
+                        <span class="step">3</span>
+                        <span>Click the balls that were highlighted</span>
+                    </div>
+                </div>
+
+                <div class="difficulty-selector">
+                    <button class="diff-btn @(difficulty == "easy" ? "selected" : "")" 
+                            @onclick="@(() => difficulty = "easy")">
+                        <span>Easy</span>
+                        <small>3 balls, 2 to track</small>
+                    </button>
+                    <button class="diff-btn @(difficulty == "medium" ? "selected" : "")" 
+                            @onclick="@(() => difficulty = "medium")">
+                        <span>Medium</span>
+                        <small>5 balls, 3 to track</small>
+                    </button>
+                    <button class="diff-btn @(difficulty == "hard" ? "selected" : "")" 
+                            @onclick="@(() => difficulty = "hard")">
+                        <span>Hard</span>
+                        <small>7 balls, 4 to track</small>
+                    </button>
+                </div>
+
+                <button class="start-btn" @onclick="StartGame">
+                    <i class="bi bi-play-fill"></i> Start Training
+                </button>
+            </div>
+        }
+        else if (gameOver)
+        {
+            <div class="results-screen">
+                <div class="results-icon @(accuracy >= 80 ? "excellent" : accuracy >= 50 ? "good" : "practice")">
+                    <i class="bi @(accuracy >= 80 ? "bi-trophy-fill" : accuracy >= 50 ? "bi-emoji-smile" : "bi-emoji-neutral")"></i>
+                </div>
+                <h2>@(accuracy >= 80 ? "Excellent Focus!" : accuracy >= 50 ? "Good Effort!" : "Keep Practicing!")</h2>
+
+                <div class="final-stats">
+                    <div class="stat-card">
+                        <i class="bi bi-bullseye"></i>
+                        <span class="stat-value">@score</span>
+                        <span class="stat-label">Points</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="bi bi-check-circle"></i>
+                        <span class="stat-value">@correctRounds</span>
+                        <span class="stat-label">Correct</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="bi bi-speedometer2"></i>
+                        <span class="stat-value">@maxLevel</span>
+                        <span class="stat-label">Max Level</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="bi bi-percent"></i>
+                        <span class="stat-value">@accuracy%</span>
+                        <span class="stat-label">Accuracy</span>
+                    </div>
+                </div>
+
+                <!-- AI Feedback Section -->
+                <div class="ai-feedback-section">
+                    @if (isLoadingAIFeedback)
+                    {
+                        <div class="ai-loading">
+                            <i class="bi bi-robot spinning"></i>
+                            <span>AI is analyzing your focus performance...</span>
+                        </div>
+                    }
+                    else if (aiAnalysis != null)
+                    {
+                        <div class="ai-feedback">
+                            <div class="ai-header">
+                                <i class="bi bi-robot"></i>
+                                <span>AI Focus Coach</span>
+                            </div>
+                            <div class="ai-content">
+                                <p>@aiAnalysis.Feedback</p>
+                                @if (!string.IsNullOrEmpty(aiAnalysis.Recommendation))
+                                {
+                                    <div class="ai-recommendation">
+                                        <strong><i class="bi bi-lightbulb"></i> Recommendation:</strong>
+                                        <span>@aiAnalysis.Recommendation</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="result-actions">
+                    <button class="action-btn primary" @onclick="StartGame">
+                        <i class="bi bi-arrow-repeat"></i> Play Again
+                    </button>
+                    <button class="action-btn secondary" @onclick="ResetToMenu">
+                        <i class="bi bi-gear"></i> Change Difficulty
+                    </button>
+                    <button class="action-btn tertiary" @onclick="GoBack">
+                        <i class="bi bi-grid"></i> All Activities
+                    </button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="tracking-area">
+                <div class="round-info">
+                    <span>Round @round of @totalRounds</span>
+                    <span class="phase-badge @currentPhase">
+                        @GetPhaseText()
+                    </span>
+                </div>
+
+                <div class="ball-container" @onclick="HandleContainerClick">
+                    @foreach (var ball in balls)
+                    {
+                        <div class="ball @GetBallClass(ball)"
+                             style="left: @(ball.X)%; top: @(ball.Y)%;"
+                             @onclick="() => SelectBall(ball)"
+                             @onclick:stopPropagation="true">
+                            @if (currentPhase == "showing" && ball.IsTarget)
+                            {
+                                <i class="bi bi-star-fill"></i>
+                            }
+                            @if (currentPhase == "selecting")
+                            {
+                                <span class="ball-number">@ball.Id</span>
+                            }
+                        </div>
+                    }
+                </div>
+
+                @if (currentPhase == "showing")
+                {
+                    <div class="phase-message">
+                        <i class="bi bi-eye"></i>
+                        Remember these @targetCount balls!
+                    </div>
+                }
+                else if (currentPhase == "tracking")
+                {
+                    <div class="phase-message">
+                        <i class="bi bi-arrows-move"></i>
+                        Track the balls as they move...
+                    </div>
+                }
+                else if (currentPhase == "selecting")
+                {
+                    <div class="phase-message selecting">
+                        <i class="bi bi-hand-index"></i>
+                        Click the @targetCount balls you tracked (@selectedBalls.Count selected)
+                    </div>
+                }
+                else if (currentPhase == "result")
+                {
+                    <div class="round-result @(lastRoundCorrect ? "correct" : "incorrect")">
+                        <i class="bi @(lastRoundCorrect ? "bi-check-circle-fill" : "bi-x-circle-fill")"></i>
+                        <span>@(lastRoundCorrect ? "Perfect! +50 points" : "Some were wrong")</span>
+                    </div>
+                }
+
+                @if (currentPhase == "selecting")
+                {
+                    <button class="confirm-btn" @onclick="ConfirmSelection" disabled="@(selectedBalls.Count != targetCount)">
+                        <i class="bi bi-check-lg"></i> Confirm Selection
+                    </button>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private bool gameStarted = false;
+    private bool gameOver = false;
+    private string difficulty = "medium";
+    private string currentPhase = "showing";
+    private int score = 0;
+    private int level = 1;
+    private int maxLevel = 1;
+    private int round = 1;
+    private int totalRounds = 5;
+    private int correctRounds = 0;
+    private int accuracy = 0;
+    private int targetCount = 3;
+    private int totalBalls = 5;
+    private bool lastRoundCorrect = false;
+    private List<Ball> balls = new();
+    private List<int> selectedBalls = new();
+    private System.Timers.Timer? phaseTimer;
+    private System.Timers.Timer? moveTimer;
+    private Random random = new();
+    
+    // User info from localStorage
+    private int userId = 0;
+    private string username = "";
+    
+    // AI Analysis variables
+    private ActivityAIResult? aiAnalysis;
+    private bool isLoadingAIFeedback = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var userIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+                var usernameStr = await JS.InvokeAsync<string>("localStorage.getItem", "username");
+                
+                if (!string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out var parsedId))
+                {
+                    userId = parsedId;
+                }
+                username = usernameStr ?? "";
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading user info: {ex.Message}");
+            }
+        }
+    }
+
+    private class ActivityAIResult
+    {
+        public string Feedback { get; set; } = "";
+        public string Recommendation { get; set; } = "";
+        public int CognitiveScore { get; set; }
+        public List<string> StrengthAreas { get; set; } = new();
+        public List<string> ImprovementAreas { get; set; } = new();
+    }
+
+    private class Ball
+    {
+        public int Id { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public bool IsTarget { get; set; }
+        public bool IsSelected { get; set; }
+        public double VelocityX { get; set; }
+        public double VelocityY { get; set; }
+    }
+
+    private void StartGame()
+    {
+        SetDifficultySettings();
+        gameStarted = true;
+        gameOver = false;
+        score = 0;
+        level = 1;
+        maxLevel = 1;
+        round = 1;
+        correctRounds = 0;
+        
+        StartRound();
+    }
+
+    private void SetDifficultySettings()
+    {
+        switch (difficulty)
+        {
+            case "easy":
+                totalBalls = 3;
+                targetCount = 2;
+                break;
+            case "medium":
+                totalBalls = 5;
+                targetCount = 3;
+                break;
+            case "hard":
+                totalBalls = 7;
+                targetCount = 4;
+                break;
+        }
+    }
+
+    private void StartRound()
+    {
+        balls.Clear();
+        selectedBalls.Clear();
+        
+        // Create balls
+        for (int i = 0; i < totalBalls; i++)
+        {
+            balls.Add(new Ball
+            {
+                Id = i + 1,
+                X = random.Next(10, 80),
+                Y = random.Next(10, 80),
+                IsTarget = false,
+                IsSelected = false,
+                VelocityX = (random.NextDouble() - 0.5) * 2,
+                VelocityY = (random.NextDouble() - 0.5) * 2
+            });
+        }
+
+        // Assign targets
+        var shuffled = balls.OrderBy(x => random.Next()).ToList();
+        for (int i = 0; i < targetCount; i++)
+        {
+            shuffled[i].IsTarget = true;
+        }
+
+        currentPhase = "showing";
+        StateHasChanged();
+
+        // Show targets for 2 seconds
+        phaseTimer?.Stop();
+        phaseTimer?.Dispose();
+        phaseTimer = new System.Timers.Timer(2000);
+        phaseTimer.AutoReset = false;
+        phaseTimer.Elapsed += async (s, e) =>
+        {
+            await InvokeAsync(() =>
+            {
+                StartTracking();
+                StateHasChanged();
+            });
+        };
+        phaseTimer.Start();
+    }
+
+    private void StartTracking()
+    {
+        currentPhase = "tracking";
+        
+        // Start movement
+        moveTimer?.Stop();
+        moveTimer?.Dispose();
+        
+        var moveDuration = 3000 + (level * 500); // Longer tracking at higher levels
+        var elapsed = 0;
+
+        moveTimer = new System.Timers.Timer(50);
+        moveTimer.Elapsed += async (s, e) =>
+        {
+            elapsed += 50;
+            
+            foreach (var ball in balls)
+            {
+                // Update position
+                ball.X += ball.VelocityX;
+                ball.Y += ball.VelocityY;
+
+                // Bounce off walls
+                if (ball.X <= 5 || ball.X >= 85)
+                {
+                    ball.VelocityX *= -1;
+                    ball.X = Math.Clamp(ball.X, 5, 85);
+                }
+                if (ball.Y <= 5 || ball.Y >= 85)
+                {
+                    ball.VelocityY *= -1;
+                    ball.Y = Math.Clamp(ball.Y, 5, 85);
+                }
+            }
+
+            await InvokeAsync(StateHasChanged);
+
+            if (elapsed >= moveDuration)
+            {
+                moveTimer?.Stop();
+                await InvokeAsync(() =>
+                {
+                    currentPhase = "selecting";
+                    StateHasChanged();
+                });
+            }
+        };
+        moveTimer.Start();
+    }
+
+    private void SelectBall(Ball ball)
+    {
+        if (currentPhase != "selecting") return;
+
+        if (selectedBalls.Contains(ball.Id))
+        {
+            selectedBalls.Remove(ball.Id);
+            ball.IsSelected = false;
+        }
+        else if (selectedBalls.Count < targetCount)
+        {
+            selectedBalls.Add(ball.Id);
+            ball.IsSelected = true;
+        }
+    }
+
+    private void HandleContainerClick()
+    {
+        // Empty handler to prevent bubbling issues
+    }
+
+    private void ConfirmSelection()
+    {
+        if (selectedBalls.Count != targetCount) return;
+
+        currentPhase = "result";
+        
+        var correctSelections = balls.Where(b => b.IsTarget && selectedBalls.Contains(b.Id)).Count();
+        lastRoundCorrect = correctSelections == targetCount;
+
+        if (lastRoundCorrect)
+        {
+            correctRounds++;
+            score += 50 + (level * 10);
+            level++;
+            if (level > maxLevel) maxLevel = level;
+        }
+        else
+        {
+            level = Math.Max(1, level - 1);
+        }
+
+        StateHasChanged();
+
+        // Wait and start next round
+        phaseTimer?.Stop();
+        phaseTimer?.Dispose();
+        phaseTimer = new System.Timers.Timer(1500);
+        phaseTimer.AutoReset = false;
+        phaseTimer.Elapsed += async (s, e) =>
+        {
+            await InvokeAsync(async () =>
+            {
+                round++;
+                if (round > totalRounds)
+                {
+                    await EndGame();
+                }
+                else
+                {
+                    StartRound();
+                }
+                StateHasChanged();
+            });
+        };
+        phaseTimer.Start();
+    }
+
+    private async Task EndGame()
+    {
+        gameOver = true;
+        accuracy = totalRounds > 0 ? (int)((double)correctRounds / totalRounds * 100) : 0;
+        phaseTimer?.Stop();
+        moveTimer?.Stop();
+        await SaveActivitySession();
+        await LoadAIFeedback();
+    }
+
+    private async Task LoadAIFeedback()
+    {
+        isLoadingAIFeedback = true;
+        StateHasChanged();
+
+        try
+        {
+            var session = new AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession
+            {
+                UserId = 1,
+                ActivityType = "FocusTracker",
+                StartTime = DateTime.UtcNow.AddMinutes(-10),
+                EndTime = DateTime.UtcNow,
+                DurationSeconds = 600,
+                Score = score,
+                Accuracy = accuracy,
+                Difficulty = difficulty,
+                ActivityData = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    maxLevel,
+                    totalRounds,
+                    correctRounds,
+                    targetCount,
+                    totalBalls,
+                    trackingAccuracy = accuracy
+                })
+            };
+
+            var result = await AIService.AnalyzeActivityPerformanceAsync(session, new List<AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession>());
+            aiAnalysis = new ActivityAIResult
+            {
+                Feedback = result.Encouragement,
+                Recommendation = result.PatternAnalysis,
+                CognitiveScore = 0,
+                StrengthAreas = result.CognitiveStrengths,
+                ImprovementAreas = result.AreasForGrowth
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"AI analysis error: {ex.Message}");
+            aiAnalysis = new ActivityAIResult
+            {
+                Feedback = accuracy >= 80 
+                    ? "Excellent focus and tracking skills! You demonstrated strong visual attention abilities." 
+                    : accuracy >= 60 
+                    ? "Good tracking performance! Your visual attention is developing well." 
+                    : "Keep practicing! Tracking moving objects helps build visual attention skills.",
+                Recommendation = "Try increasing the difficulty to challenge your visual tracking abilities further."
+            };
+        }
+        finally
+        {
+            isLoadingAIFeedback = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveActivitySession()
+    {
+        try
+        {
+            var activityData = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                maxLevel = maxLevel,
+                totalRounds = totalRounds,
+                correctRounds = correctRounds,
+                difficulty = difficulty,
+                targetCount = targetCount,
+                totalBalls = totalBalls
+            });
+
+            var session = new
+            {
+                userId = userId,
+                username = username,
+                activityType = "FocusTracker",
+                activityName = "Focus Tracker",
+                durationSeconds = 600,
+                score = score,
+                accuracy = (decimal)accuracy,
+                completionPercentage = 100,
+                difficulty = difficulty,
+                activityData = activityData,
+                moodBefore = "",
+                moodAfter = ""
+            };
+
+            var apiUrl = $"{Navigation.BaseUri}api/activities/save";
+            await Http.PostAsJsonAsync(apiUrl, session);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to save activity session: {ex.Message}");
+        }
+    }
+
+    private void ResetToMenu()
+    {
+        gameStarted = false;
+        gameOver = false;
+        phaseTimer?.Stop();
+        moveTimer?.Stop();
+    }
+
+    private string GetBallClass(Ball ball)
+    {
+        var classes = new List<string>();
+        
+        if (currentPhase == "showing" && ball.IsTarget)
+            classes.Add("target");
+        if (currentPhase == "result" && ball.IsTarget)
+            classes.Add("reveal-target");
+        if (ball.IsSelected)
+            classes.Add("selected");
+        if (currentPhase == "result" && ball.IsSelected && !ball.IsTarget)
+            classes.Add("wrong");
+        
+        return string.Join(" ", classes);
+    }
+
+    private string GetPhaseText()
+    {
+        return currentPhase switch
+        {
+            "showing" => "Memorize",
+            "tracking" => "Tracking",
+            "selecting" => "Select",
+            "result" => "Result",
+            _ => ""
+        };
+    }
+
+    private void GoBack()
+    {
+        phaseTimer?.Stop();
+        phaseTimer?.Dispose();
+        moveTimer?.Stop();
+        moveTimer?.Dispose();
+        Navigation.NavigateTo("/games");
+    }
+
+    public void Dispose()
+    {
+        phaseTimer?.Stop();
+        phaseTimer?.Dispose();
+        moveTimer?.Stop();
+        moveTimer?.Dispose();
+    }
+}
+
+<style>
+    .activity-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    }
+
+    .activity-header {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: white;
+        padding: 1.5rem 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .back-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        border: 2px solid rgba(255,255,255,0.3);
+        background: rgba(255,255,255,0.1);
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        transition: all 200ms;
+    }
+
+    .back-btn:hover {
+        background: rgba(255,255,255,0.2);
+    }
+
+    .header-info {
+        flex-grow: 1;
+    }
+
+    .header-info h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .header-info p {
+        margin: 0.25rem 0 0;
+        opacity: 0.9;
+        font-size: 0.9rem;
+    }
+
+    .score-display {
+        display: flex;
+        gap: 1rem;
+    }
+
+    .score-item {
+        background: rgba(255,255,255,0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 1.125rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .game-area {
+        max-width: 700px;
+        margin: 2rem auto;
+        padding: 0 1.5rem;
+    }
+
+    .start-screen, .results-screen {
+        background: white;
+        border-radius: 24px;
+        padding: 2.5rem;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+
+    .focus-icon, .results-icon {
+        width: 100px;
+        height: 100px;
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 3rem;
+        color: white;
+    }
+
+    .results-icon.excellent {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+
+    .results-icon.good {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+
+    .results-icon.practice {
+        background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+    }
+
+    .start-screen h2, .results-screen h2 {
+        margin: 0 0 0.5rem;
+        font-size: 1.75rem;
+        color: #1f2937;
+    }
+
+    .start-screen > p {
+        color: #6b7280;
+        margin-bottom: 2rem;
+    }
+
+    .instructions {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        margin-bottom: 2rem;
+        max-width: 400px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .instruction-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        text-align: left;
+    }
+
+    .instruction-item .step {
+        width: 36px;
+        height: 36px;
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .difficulty-selector {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: center;
+        margin-bottom: 2rem;
+    }
+
+    .diff-btn {
+        padding: 1rem 1.5rem;
+        background: #f9fafb;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 200ms;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .diff-btn:hover {
+        border-color: #f59e0b;
+        background: #fef3c7;
+    }
+
+    .diff-btn.selected {
+        border-color: #f59e0b;
+        background: #fef3c7;
+        box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2);
+    }
+
+    .diff-btn span {
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .diff-btn small {
+        font-size: 0.75rem;
+        color: #6b7280;
+    }
+
+    .start-btn {
+        padding: 1rem 3rem;
+        font-size: 1.25rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: white;
+        border: none;
+        border-radius: 16px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        transition: all 300ms;
+    }
+
+    .start-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 30px rgba(245, 158, 11, 0.4);
+    }
+
+    .tracking-area {
+        background: white;
+        border-radius: 24px;
+        padding: 1.5rem;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+
+    .round-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .round-info > span:first-child {
+        font-weight: 600;
+        color: #4b5563;
+    }
+
+    .phase-badge {
+        padding: 0.375rem 0.75rem;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        font-weight: 600;
+    }
+
+    .phase-badge.showing {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .phase-badge.tracking {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+
+    .phase-badge.selecting {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .phase-badge.result {
+        background: #e5e7eb;
+        color: #374151;
+    }
+
+    .ball-container {
+        position: relative;
+        width: 100%;
+        height: 400px;
+        background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+        border-radius: 16px;
+        margin-bottom: 1rem;
+        overflow: hidden;
+    }
+
+    .ball {
+        position: absolute;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: transform 100ms;
+        transform: translate(-50%, -50%);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .ball:hover {
+        transform: translate(-50%, -50%) scale(1.1);
+    }
+
+    .ball.target {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        animation: pulse 1s ease-in-out infinite;
+    }
+
+    .ball.reveal-target {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        box-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
+    }
+
+    .ball.selected {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.4);
+    }
+
+    .ball.wrong {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.4);
+    }
+
+    .ball i {
+        color: white;
+        font-size: 1.25rem;
+    }
+
+    .ball-number {
+        color: white;
+        font-weight: 700;
+        font-size: 1rem;
+    }
+
+    .phase-message {
+        text-align: center;
+        padding: 1rem;
+        background: #f9fafb;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        color: #4b5563;
+        font-weight: 500;
+    }
+
+    .phase-message.selecting {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .phase-message i {
+        font-size: 1.25rem;
+    }
+
+    .round-result {
+        text-align: center;
+        padding: 1rem;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        font-weight: 600;
+    }
+
+    .round-result.correct {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .round-result.incorrect {
+        background: #fef2f2;
+        color: #991b1b;
+    }
+
+    .round-result i {
+        font-size: 1.5rem;
+    }
+
+    .confirm-btn {
+        width: 100%;
+        padding: 1rem;
+        font-size: 1.125rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .confirm-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+    }
+
+    .confirm-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .final-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin: 2rem 0;
+    }
+
+    .stat-card {
+        background: #f9fafb;
+        border-radius: 16px;
+        padding: 1.25rem;
+        text-align: center;
+    }
+
+    .stat-card i {
+        font-size: 1.5rem;
+        color: #f59e0b;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-card .stat-value {
+        display: block;
+        font-size: 2rem;
+        font-weight: 800;
+        color: #1f2937;
+    }
+
+    .stat-card .stat-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .result-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .action-btn {
+        padding: 1rem;
+        border-radius: 12px;
+        font-family: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .action-btn.primary {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: white;
+        border: none;
+    }
+
+    .action-btn.primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(245, 158, 11, 0.3);
+    }
+
+    .action-btn.secondary {
+        background: #fef3c7;
+        color: #92400e;
+        border: none;
+    }
+
+    .action-btn.tertiary {
+        background: white;
+        border: 2px solid #e5e7eb;
+        color: #6b7280;
+    }
+
+    @@keyframes pulse {
+        0%, 100% { transform: translate(-50%, -50%) scale(1); }
+        50% { transform: translate(-50%, -50%) scale(1.1); }
+    }
+
+    /* AI Feedback Styles */
+    .ai-feedback-section {
+        margin: 1.5rem 0;
+    }
+
+    .ai-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        padding: 1.5rem;
+        background: #fffbeb;
+        border-radius: 12px;
+        color: #92400e;
+    }
+
+    .ai-loading .spinning {
+        animation: spin 1s linear infinite;
+    }
+
+    .ai-feedback {
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        border: 1px solid #bae6fd;
+        border-radius: 16px;
+        overflow: hidden;
+    }
+
+    .ai-header {
+        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+        color: white;
+        padding: 0.75rem 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+    }
+
+    .ai-content {
+        padding: 1.25rem;
+    }
+
+    .ai-content p {
+        margin: 0 0 1rem;
+        color: #1e40af;
+        line-height: 1.6;
+    }
+
+    .ai-recommendation {
+        background: white;
+        padding: 1rem;
+        border-radius: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .ai-recommendation strong {
+        color: #0369a1;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .ai-recommendation span {
+        color: #374151;
+    }
+
+    @@keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    @@media (max-width: 640px) {
+        .ball-container {
+            height: 300px;
+        }
+
+        .ball {
+            width: 40px;
+            height: 40px;
+        }
+    }
+</style>

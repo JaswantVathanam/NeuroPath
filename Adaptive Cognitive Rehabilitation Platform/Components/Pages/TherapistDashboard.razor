@@ -1,0 +1,3130 @@
+@page "/therapist-dashboard"
+@rendermode InteractiveServer
+@using System.Net.Http.Json
+@using System.Text.Json.Serialization
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<PageTitle>Therapist Dashboard - NeuroPath</PageTitle>
+
+<!-- Bootstrap Icons CDN -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+<div class="therapist-container">
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <div class="hero-content">
+            <h1 class="hero-title">
+                <i class="bi bi-clipboard2-pulse"></i>
+                Therapist Dashboard
+            </h1>
+            <p class="hero-subtitle">Monitor patient progress and cognitive rehabilitation outcomes</p>
+        </div>
+        <div class="hero-actions">
+            @if (showUserAnalysis)
+            {
+                <button class="btn-back" @onclick="BackToOverview">
+                    <i class="bi bi-arrow-left"></i> Back to Overview
+                </button>
+            }
+            <button class="btn-refresh" @onclick="RefreshData">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading-container">
+            <div class="loading-spinner"></div>
+            <p>Loading patient analytics...</p>
+        </div>
+    }
+    else if (showUserAnalysis && userAnalysis != null)
+    {
+        <!-- Detailed User Analysis View -->
+        <div class="user-analysis-view">
+            <!-- User Header -->
+            <div class="user-analysis-header">
+                <div class="user-avatar-large">
+                    <i class="bi bi-person-circle"></i>
+                </div>
+                <div class="user-header-info">
+                    <h2>@userAnalysis.Username</h2>
+                    <span class="user-id-badge">ID: @userAnalysis.UserId</span>
+                    <div class="user-header-stats">
+                        <span class="header-stat"><i class="bi bi-controller"></i> @userAnalysis.Summary.TotalSessions sessions</span>
+                        <span class="header-stat"><i class="bi bi-calendar3"></i> Since @userAnalysis.Summary.FirstSession.ToString("MMM d, yyyy")</span>
+                        <span class="header-stat trend-@userAnalysis.Summary.OverallTrend.ToLower()">
+                            <i class="bi @GetTrendIcon(userAnalysis.Summary.OverallTrend)"></i> @userAnalysis.Summary.OverallTrend
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Stats -->
+            <div class="analysis-stats-grid">
+                <div class="analysis-stat-card">
+                    <i class="bi bi-joystick"></i>
+                    <div class="stat-data">
+                        <span class="stat-number">@userAnalysis.Summary.TotalSessions</span>
+                        <span class="stat-label">Total Sessions</span>
+                    </div>
+                </div>
+                <div class="analysis-stat-card">
+                    <i class="bi bi-bar-chart-fill"></i>
+                    <div class="stat-data">
+                        <span class="stat-number">@userAnalysis.Summary.AverageScore.ToString("F0")</span>
+                        <span class="stat-label">Avg Score</span>
+                    </div>
+                </div>
+                <div class="analysis-stat-card">
+                    <i class="bi bi-bullseye"></i>
+                    <div class="stat-data">
+                        <span class="stat-number">@userAnalysis.Summary.AverageAccuracy.ToString("F1")%</span>
+                        <span class="stat-label">Accuracy</span>
+                    </div>
+                </div>
+                <div class="analysis-stat-card highlight">
+                    <i class="bi bi-trophy-fill"></i>
+                    <div class="stat-data">
+                        <span class="stat-number">@userAnalysis.Summary.BestScore</span>
+                        <span class="stat-label">Best Score</span>
+                    </div>
+                </div>
+                <div class="analysis-stat-card">
+                    <i class="bi bi-clock-history"></i>
+                    <div class="stat-data">
+                        <span class="stat-number">@FormatTimePlayed(userAnalysis.Summary.TotalTimePlayed)</span>
+                        <span class="stat-label">Time Played</span>
+                    </div>
+                </div>
+                <div class="analysis-stat-card @(userAnalysis.Summary.OverallImprovement > 0 ? "positive" : userAnalysis.Summary.OverallImprovement < 0 ? "negative" : "")">
+                    <i class="bi bi-graph-up-arrow"></i>
+                    <div class="stat-data">
+                        <span class="stat-number">@(userAnalysis.Summary.OverallImprovement > 0 ? "+" : "")@userAnalysis.Summary.OverallImprovement.ToString("F1")</span>
+                        <span class="stat-label">Improvement</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analysis Grid -->
+            <div class="analysis-grid">
+                <!-- Game Breakdown -->
+                <div class="analysis-panel game-breakdown-panel">
+                    <div class="panel-header">
+                        <h3><i class="bi bi-pie-chart-fill"></i> Performance by Game</h3>
+                    </div>
+                    <div class="game-breakdown-list">
+                        @foreach (var game in userAnalysis.GameBreakdown)
+                        {
+                            var gameClass = GetGameClass(game.GameType);
+                            <div class="game-breakdown-item @gameClass">
+                                <div class="breakdown-header">
+                                    <div class="game-icon">
+                                        <i class="bi @GetGameBootstrapIcon(game.GameType)"></i>
+                                    </div>
+                                    <div class="game-name">
+                                        <h4>@game.GameName</h4>
+                                        <span>@game.TotalSessions sessions</span>
+                                    </div>
+                                    <span class="trend-badge @game.Trend.ToLower()">
+                                        <i class="bi @GetTrendIcon(game.Trend)"></i> @game.Trend
+                                    </span>
+                                </div>
+                                <div class="breakdown-stats">
+                                    <div class="breakdown-stat">
+                                        <span class="label">Avg Score</span>
+                                        <span class="value">@game.AverageScore.ToString("F0")</span>
+                                    </div>
+                                    <div class="breakdown-stat">
+                                        <span class="label">Best</span>
+                                        <span class="value highlight">@game.BestScore</span>
+                                    </div>
+                                    <div class="breakdown-stat">
+                                        <span class="label">Accuracy</span>
+                                        <span class="value">@game.AverageAccuracy.ToString("F1")%</span>
+                                    </div>
+                                    <div class="breakdown-stat">
+                                        <span class="label">Max Level</span>
+                                        <span class="value">@game.MaxDifficulty</span>
+                                    </div>
+                                </div>
+                                <div class="accuracy-progress">
+                                    <div class="progress-fill" style="width: @game.AverageAccuracy%"></div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Difficulty Progression -->
+                <div class="analysis-panel difficulty-panel">
+                    <div class="panel-header">
+                        <h3><i class="bi bi-bar-chart-steps"></i> Difficulty Progression</h3>
+                    </div>
+                    <div class="difficulty-chart">
+                        @foreach (var diff in userAnalysis.DifficultyProgression)
+                        {
+                            <div class="difficulty-bar-wrapper">
+                                <div class="difficulty-bar" style="--height: @Math.Max(diff.SuccessRate, 10)%">
+                                    <span class="bar-sessions">@diff.SessionsPlayed</span>
+                                </div>
+                                <span class="difficulty-label">@diff.DifficultyName</span>
+                                <span class="difficulty-accuracy">@diff.AverageAccuracy.ToString("F0")%</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Daily Pattern -->
+                <div class="analysis-panel daily-pattern-panel">
+                    <div class="panel-header">
+                        <h3><i class="bi bi-calendar-week"></i> Activity Pattern</h3>
+                    </div>
+                    <div class="daily-pattern-chart">
+                        @foreach (var day in userAnalysis.DailyPattern)
+                        {
+                            var maxSessions = userAnalysis.DailyPattern.Max(d => d.SessionsPlayed);
+                            var heightPct = maxSessions > 0 ? (day.SessionsPlayed * 100 / maxSessions) : 10;
+                            <div class="daily-bar-wrapper">
+                                <div class="daily-bar" style="--height: @Math.Max(heightPct, 10)%">
+                                    <span class="bar-value">@day.SessionsPlayed</span>
+                                </div>
+                                <span class="day-label">@day.Day.Substring(0, 3)</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Strengths & Areas for Improvement -->
+                <div class="analysis-panel insights-panel">
+                    <div class="panel-header">
+                        <h3><i class="bi bi-lightbulb-fill"></i> Cognitive Analysis</h3>
+                    </div>
+                    <div class="cognitive-analysis">
+                        @if (userAnalysis.Strengths.Any())
+                        {
+                            <div class="strengths-section">
+                                <h4><i class="bi bi-check-circle-fill"></i> Strengths</h4>
+                                @foreach (var strength in userAnalysis.Strengths)
+                                {
+                                    <div class="insight-item strength">
+                                        <span class="insight-area">@strength.Area</span>
+                                        <span class="insight-score">@strength.Score.ToString("F1")%</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        @if (userAnalysis.AreasForImprovement.Any())
+                        {
+                            <div class="improvement-section">
+                                <h4><i class="bi bi-exclamation-triangle-fill"></i> Areas to Focus</h4>
+                                @foreach (var area in userAnalysis.AreasForImprovement)
+                                {
+                                    <div class="insight-item improvement">
+                                        <span class="insight-area">@area.Area</span>
+                                        <span class="insight-suggestion">@area.Suggestion</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        @if (!userAnalysis.Strengths.Any() && !userAnalysis.AreasForImprovement.Any())
+                        {
+                            <p class="no-insights">More sessions needed for detailed cognitive analysis.</p>
+                        }
+                    </div>
+                </div>
+
+                <!-- Recommendations -->
+                <div class="analysis-panel recommendations-panel">
+                    <div class="panel-header">
+                        <h3><i class="bi bi-clipboard-check"></i> Therapist Recommendations</h3>
+                    </div>
+                    <div class="recommendations-list">
+                        @foreach (var rec in userAnalysis.Recommendations)
+                        {
+                            <div class="recommendation-item">
+                                <i class="bi bi-arrow-right-circle-fill"></i>
+                                <span>@rec</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Live AI-Powered Analysis (from Phi-4-mini) -->
+                <div class="analysis-panel ai-insights-panel">
+                    <div class="panel-header ai-header">
+                        <h3><i class="bi bi-robot"></i> AI-Powered Analysis</h3>
+                        <div class="ai-header-meta">
+                            @if (isLoadingAI)
+                            {
+                                <span class="ai-badge loading">
+                                    <i class="bi bi-hourglass-split spinning"></i> Analyzing with Phi-4-mini...
+                                </span>
+                            }
+                            else if (liveAiAnalysis?.AiAnalysis != null)
+                            {
+                                <span class="ai-badge">@liveAiAnalysis.AiAnalysis.Source</span>
+                                <span class="risk-badge @GetRiskClass(liveAiAnalysis.AiAnalysis.RiskLevel)">Risk: @liveAiAnalysis.AiAnalysis.RiskLevel</span>
+                            }
+                        </div>
+                    </div>
+                    
+                    @if (isLoadingAI)
+                    {
+                        <div class="ai-loading-content">
+                            <div class="ai-loading-animation">
+                                <i class="bi bi-cpu"></i>
+                                <div class="pulse-ring"></div>
+                            </div>
+                            <p>Phi-4-mini is analyzing @userAnalysis.Username's performance data...</p>
+                            <span class="ai-loading-hint">This may take 10-30 seconds</span>
+                        </div>
+                    }
+                    else if (liveAiAnalysis?.AiAnalysis != null)
+                    {
+                        <div class="ai-insights-content">
+                            <!-- Overall Assessment -->
+                            <div class="ai-insight-section full-width highlight">
+                                <div class="ai-insight-icon performance">
+                                    <i class="bi bi-clipboard2-data"></i>
+                                </div>
+                                <div class="ai-insight-details">
+                                    <h4>Overall Assessment</h4>
+                                    <p>@liveAiAnalysis.AiAnalysis.OverallAssessment</p>
+                                </div>
+                            </div>
+
+                            <!-- Game-Specific Analysis -->
+                            <div class="ai-insight-section">
+                                <div class="ai-insight-icon memory">
+                                    <i class="bi bi-grid-3x3-gap-fill"></i>
+                                </div>
+                                <div class="ai-insight-details">
+                                    <h4>Memory Match Analysis</h4>
+                                    <p>@liveAiAnalysis.AiAnalysis.MemoryAnalysis</p>
+                                </div>
+                            </div>
+                            
+                            <div class="ai-insight-section">
+                                <div class="ai-insight-icon reaction">
+                                    <i class="bi bi-lightning-charge-fill"></i>
+                                </div>
+                                <div class="ai-insight-details">
+                                    <h4>Reaction Trainer Analysis</h4>
+                                    <p>@liveAiAnalysis.AiAnalysis.ReactionAnalysis</p>
+                                </div>
+                            </div>
+                            
+                            <div class="ai-insight-section">
+                                <div class="ai-insight-icon sorting">
+                                    <i class="bi bi-sort-down"></i>
+                                </div>
+                                <div class="ai-insight-details">
+                                    <h4>Sorting Task Analysis</h4>
+                                    <p>@liveAiAnalysis.AiAnalysis.SortingAnalysis</p>
+                                </div>
+                            </div>
+
+                            <div class="ai-insight-section">
+                                <div class="ai-insight-icon pattern">
+                                    <i class="bi bi-grid-3x3"></i>
+                                </div>
+                                <div class="ai-insight-details">
+                                    <h4>Pattern Copy Analysis</h4>
+                                    <p>@liveAiAnalysis.AiAnalysis.PatternAnalysis</p>
+                                </div>
+                            </div>
+
+                            <!-- Cognitive Strengths -->
+                            @if (liveAiAnalysis.AiAnalysis.CognitiveStrengths.Any())
+                            {
+                                <div class="ai-insight-section">
+                                    <div class="ai-insight-icon cognitive">
+                                        <i class="bi bi-trophy-fill"></i>
+                                    </div>
+                                    <div class="ai-insight-details">
+                                        <h4>Cognitive Strengths</h4>
+                                        <ul class="ai-list strengths">
+                                            @foreach (var strength in liveAiAnalysis.AiAnalysis.CognitiveStrengths)
+                                            {
+                                                <li><i class="bi bi-check-circle-fill"></i> @strength</li>
+                                            }
+                                        </ul>
+                                    </div>
+                                </div>
+                            }
+
+                            <!-- Areas of Concern -->
+                            @if (liveAiAnalysis.AiAnalysis.AreasOfConcern.Any())
+                            {
+                                <div class="ai-insight-section">
+                                    <div class="ai-insight-icon concern">
+                                        <i class="bi bi-exclamation-triangle-fill"></i>
+                                    </div>
+                                    <div class="ai-insight-details">
+                                        <h4>Areas of Concern</h4>
+                                        <ul class="ai-list concerns">
+                                            @foreach (var concern in liveAiAnalysis.AiAnalysis.AreasOfConcern)
+                                            {
+                                                <li><i class="bi bi-arrow-right-circle-fill"></i> @concern</li>
+                                            }
+                                        </ul>
+                                    </div>
+                                </div>
+                            }
+
+                            <!-- Progress Summary -->
+                            <div class="ai-insight-section full-width">
+                                <div class="ai-insight-icon progress">
+                                    <i class="bi bi-graph-up-arrow"></i>
+                                </div>
+                                <div class="ai-insight-details">
+                                    <h4>Progress Summary</h4>
+                                    <p>@liveAiAnalysis.AiAnalysis.ProgressSummary</p>
+                                </div>
+                            </div>
+
+                            <!-- Therapy Recommendations -->
+                            @if (liveAiAnalysis.AiAnalysis.TherapyRecommendations.Any())
+                            {
+                                <div class="ai-insight-section full-width">
+                                    <div class="ai-insight-icon therapy">
+                                        <i class="bi bi-clipboard2-pulse"></i>
+                                    </div>
+                                    <div class="ai-insight-details">
+                                        <h4>Therapy Recommendations</h4>
+                                        <ul class="ai-list recommendations">
+                                            @foreach (var rec in liveAiAnalysis.AiAnalysis.TherapyRecommendations)
+                                            {
+                                                <li><i class="bi bi-arrow-right-circle-fill"></i> @rec</li>
+                                            }
+                                        </ul>
+                                    </div>
+                                </div>
+                            }
+
+                            <!-- Next Session Focus -->
+                            <div class="ai-insight-section">
+                                <div class="ai-insight-icon next">
+                                    <i class="bi bi-calendar-check"></i>
+                                </div>
+                                <div class="ai-insight-details">
+                                    <h4>Next Session Focus</h4>
+                                    <p>@liveAiAnalysis.AiAnalysis.NextSessionFocus</p>
+                                </div>
+                            </div>
+
+                            <!-- Encouraging Note -->
+                            <div class="ai-insight-section encouraging-note">
+                                <div class="ai-insight-icon encourage">
+                                    <i class="bi bi-heart-fill"></i>
+                                </div>
+                                <div class="ai-insight-details">
+                                    <h4>Note for Patient</h4>
+                                    <p class="encouraging-text">@liveAiAnalysis.AiAnalysis.EncouragingNote</p>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="ai-no-data">
+                            <i class="bi bi-robot"></i>
+                            <p>AI analysis not available. Click "Analyze" on a patient to get AI-powered insights.</p>
+                        </div>
+                    }
+                </div>
+
+                <!-- Recent Sessions -->
+                <div class="analysis-panel recent-sessions-panel">
+                    <div class="panel-header">
+                        <h3><i class="bi bi-clock-history"></i> Recent Sessions</h3>
+                    </div>
+                    <div class="recent-sessions-list">
+                        @foreach (var session in userAnalysis.RecentSessions)
+                        {
+                            var gameClass = GetGameClass(session.GameType);
+                            <div class="session-row @gameClass">
+                                <div class="session-game">
+                                    <i class="bi @GetGameBootstrapIcon(session.GameType)"></i>
+                                    <span>@session.GameName</span>
+                                </div>
+                                <div class="session-score">@session.Score pts</div>
+                                <div class="session-accuracy">@session.Accuracy.ToString("F1")%</div>
+                                <div class="session-level">Lvl @session.Difficulty</div>
+                                <div class="session-date">@FormatDateTime(session.PlayedAt)</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else if (analytics != null)
+    {
+        <!-- Overview Stats Cards -->
+        <div class="stats-overview">
+            <div class="stat-card patients" style="--delay: 0.1s">
+                <div class="stat-icon">
+                    <i class="bi bi-people-fill"></i>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-value">@analytics.TotalUsers</span>
+                    <span class="stat-label">Total Patients</span>
+                </div>
+                <div class="stat-trend up">
+                    <i class="bi bi-graph-up-arrow"></i>
+                </div>
+            </div>
+            
+            <div class="stat-card sessions" style="--delay: 0.2s">
+                <div class="stat-icon">
+                    <i class="bi bi-controller"></i>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-value">@analytics.TotalSessions</span>
+                    <span class="stat-label">Total Sessions</span>
+                </div>
+                <div class="stat-trend up">
+                    <i class="bi bi-activity"></i>
+                </div>
+            </div>
+            
+            <div class="stat-card accuracy" style="--delay: 0.3s">
+                <div class="stat-icon">
+                    <i class="bi bi-bullseye"></i>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-value">@analytics.OverallAccuracy.ToString("F1")%</span>
+                    <span class="stat-label">Overall Accuracy</span>
+                </div>
+                <div class="stat-indicator">
+                    <div class="mini-progress" style="--percent: @analytics.OverallAccuracy%"></div>
+                </div>
+            </div>
+            
+            <div class="stat-card score" style="--delay: 0.4s">
+                <div class="stat-icon">
+                    <i class="bi bi-star-fill"></i>
+                </div>
+                <div class="stat-info">
+                    <span class="stat-value">@analytics.AverageScore.ToString("F0")</span>
+                    <span class="stat-label">Average Score</span>
+                </div>
+                <div class="stat-trend neutral">
+                    <i class="bi bi-dash-lg"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="dashboard-grid">
+            <!-- Left Column: Patient Selection & Details -->
+            <div class="left-column">
+                <!-- Patient Selection Panel -->
+                <div class="panel patient-panel">
+                    <div class="panel-header">
+                        <h3><i class="bi bi-person-lines-fill"></i> Patient List</h3>
+                        <span class="patient-count">@analytics.UserSummaries.Count patients</span>
+                    </div>
+                    <div class="patient-list">
+                        @foreach (var user in analytics.UserSummaries)
+                        {
+                            var isSelected = selectedPatient?.Username == user.Username;
+                            <div class="patient-item @(isSelected ? "selected" : "")" @onclick="() => SelectPatient(user)">
+                                <div class="patient-avatar">
+                                    <i class="bi bi-person-circle"></i>
+                                    <span class="status-dot @GetProgressClass(user.ProgressTrend)"></span>
+                                </div>
+                                <div class="patient-info">
+                                    <span class="patient-name">@user.Username</span>
+                                    <span class="patient-meta">
+                                        <i class="bi bi-calendar3"></i> Last: @FormatDate(user.LastPlayed)
+                                    </span>
+                                </div>
+                                <div class="patient-actions">
+                                    <button type="button" class="btn-analyze" @onclick="() => ViewUserAnalysis(user.UserId)" @onclick:stopPropagation="true" @onclick:preventDefault="true">
+                                        <i class="bi bi-graph-up"></i> Analyze
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Selected Patient Details -->
+                @if (selectedPatient != null)
+                {
+                    <div class="panel patient-details-panel">
+                        <div class="panel-header">
+                            <h3><i class="bi bi-person-badge"></i> Patient Details</h3>
+                        </div>
+                        <div class="patient-profile">
+                            <div class="profile-header">
+                                <div class="profile-avatar large">
+                                    <i class="bi bi-person-circle"></i>
+                                </div>
+                                <div class="profile-name">
+                                    <h4>@selectedPatient.Username</h4>
+                                    <span class="profile-id">ID: @selectedPatient.UserId</span>
+                                </div>
+                            </div>
+                            <div class="profile-stats">
+                                <div class="profile-stat">
+                                    <i class="bi bi-joystick"></i>
+                                    <div>
+                                        <span class="value">@selectedPatient.TotalSessions</span>
+                                        <span class="label">Sessions</span>
+                                    </div>
+                                </div>
+                                <div class="profile-stat">
+                                    <i class="bi bi-bar-chart-fill"></i>
+                                    <div>
+                                        <span class="value">@selectedPatient.AverageScore.ToString("F0")</span>
+                                        <span class="label">Avg Score</span>
+                                    </div>
+                                </div>
+                                <div class="profile-stat">
+                                    <i class="bi bi-bullseye"></i>
+                                    <div>
+                                        <span class="value">@selectedPatient.AverageAccuracy.ToString("F1")%</span>
+                                        <span class="label">Accuracy</span>
+                                    </div>
+                                </div>
+                                <div class="profile-stat highlight">
+                                    <i class="bi bi-trophy-fill"></i>
+                                    <div>
+                                        <span class="value">@selectedPatient.BestScore</span>
+                                        <span class="label">Best Score</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="profile-progress">
+                                <div class="progress-header">
+                                    <span>Accuracy Progress</span>
+                                    <span class="progress-value">@selectedPatient.AverageAccuracy.ToString("F1")%</span>
+                                </div>
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar-fill" style="width: @selectedPatient.AverageAccuracy%"></div>
+                                </div>
+                            </div>
+                            <div class="profile-meta">
+                                <div class="meta-item">
+                                    <i class="bi bi-clock-history"></i>
+                                    <span>Total Time: @FormatTimePlayed(selectedPatient.TotalTimePlayed)</span>
+                                </div>
+                                <div class="meta-item">
+                                    <i class="bi bi-graph-up"></i>
+                                    <span>Progress: <strong class="@GetProgressClass(selectedPatient.ProgressTrend)">@selectedPatient.ProgressTrend</strong></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Right Column: Games & Activity -->
+            <div class="right-column">
+                <!-- Game Performance Cards -->
+                <div class="panel games-panel">
+                    <div class="panel-header">
+                        <h3><i class="bi bi-controller"></i> Game Performance</h3>
+                    </div>
+                    <div class="games-grid">
+                        @foreach (var game in analytics.GameTypeStats)
+                        {
+                            var gameClass = GetGameClass(game.GameType);
+                            <div class="game-card @gameClass">
+                                <div class="game-card-header">
+                                    <div class="game-icon-wrapper">
+                                        <i class="bi @GetGameBootstrapIcon(game.GameType)"></i>
+                                    </div>
+                                    <div class="game-title">
+                                        <h4>@game.GameName</h4>
+                                        <span class="session-count">@game.TotalSessions sessions</span>
+                                    </div>
+                                </div>
+                                <div class="game-card-stats">
+                                    <div class="game-stat">
+                                        <span class="stat-label"><i class="bi bi-bar-chart"></i> Avg Score</span>
+                                        <span class="stat-value">@game.AverageScore.ToString("F0")</span>
+                                    </div>
+                                    <div class="game-stat">
+                                        <span class="stat-label"><i class="bi bi-bullseye"></i> Accuracy</span>
+                                        <span class="stat-value">@game.AverageAccuracy.ToString("F1")%</span>
+                                    </div>
+                                    <div class="game-stat">
+                                        <span class="stat-label"><i class="bi bi-trophy"></i> Best</span>
+                                        <span class="stat-value highlight">@game.BestScore</span>
+                                    </div>
+                                    @if (game.AverageReactionTime > 0)
+                                    {
+                                        <div class="game-stat">
+                                            <span class="stat-label"><i class="bi bi-lightning"></i> Reaction</span>
+                                            <span class="stat-value">@game.AverageReactionTime.ToString("F0")ms</span>
+                                        </div>
+                                    }
+                                    @if (game.AverageMoves > 0)
+                                    {
+                                        <div class="game-stat">
+                                            <span class="stat-label"><i class="bi bi-cursor"></i> Moves</span>
+                                            <span class="stat-value">@game.AverageMoves.ToString("F0")</span>
+                                        </div>
+                                    }
+                                </div>
+                                <div class="game-card-progress">
+                                    <div class="progress-fill" style="width: @Math.Min(game.AverageAccuracy, 100)%"></div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Activities Performance Section -->
+                <div class="panel activities-panel">
+                    <div class="panel-header">
+                        <h3><i class="bi bi-activity"></i> Activities Performance</h3>
+                        <button class="btn-refresh-sm" @onclick="RefreshActivities" disabled="@isLoadingActivities">
+                            <i class="bi @(isLoadingActivities ? "bi-arrow-repeat spinning" : "bi-arrow-clockwise")"></i>
+                        </button>
+                    </div>
+                    @if (isLoadingActivities)
+                    {
+                        <div class="loading-activities">
+                            <div class="loading-spinner-sm"></div>
+                            <span>Loading activities...</span>
+                        </div>
+                    }
+                    else if (activityStats != null && activityStats.Any())
+                    {
+                        <div class="activities-grid">
+                            @foreach (var activity in activityStats)
+                            {
+                                var activityClass = GetActivityClass(activity.ActivityType);
+                                <div class="activity-card @activityClass">
+                                    <div class="activity-card-header">
+                                        <div class="activity-icon-wrapper">
+                                            <i class="bi @GetActivityIcon(activity.ActivityType)"></i>
+                                        </div>
+                                        <div class="activity-title">
+                                            <h4>@GetActivityName(activity.ActivityType)</h4>
+                                            <span class="session-count">@activity.TotalSessions sessions</span>
+                                        </div>
+                                    </div>
+                                    <div class="activity-card-stats">
+                                        <div class="activity-stat">
+                                            <span class="stat-label"><i class="bi bi-bar-chart"></i> Avg Score</span>
+                                            <span class="stat-value">@activity.AverageScore.ToString("F0")</span>
+                                        </div>
+                                        <div class="activity-stat">
+                                            <span class="stat-label"><i class="bi bi-bullseye"></i> Accuracy</span>
+                                            <span class="stat-value">@activity.AverageAccuracy.ToString("F1")%</span>
+                                        </div>
+                                        <div class="activity-stat">
+                                            <span class="stat-label"><i class="bi bi-clock"></i> Avg Time</span>
+                                            <span class="stat-value">@activity.AverageDuration.ToString("F0")m</span>
+                                        </div>
+                                    </div>
+                                    <div class="activity-card-progress">
+                                        <div class="progress-fill" style="width: @Math.Min(activity.AverageAccuracy, 100)%"></div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="no-activities">
+                            <i class="bi bi-inbox"></i>
+                            <p>No activity data yet. Activities will appear here when patients complete exercises.</p>
+                        </div>
+                    }
+                </div>
+
+                <!-- Weekly Activity Chart -->
+                <div class="panel activity-chart-panel">
+                    <div class="panel-header">
+                        <h3><i class="bi bi-calendar-week"></i> Weekly Activity</h3>
+                    </div>
+                    <div class="weekly-chart">
+                        @foreach (var day in analytics.WeeklyActivity)
+                        {
+                            <div class="chart-bar-wrapper">
+                                <div class="chart-bar" style="--height: @day.HeightPercent%">
+                                    <span class="bar-value">@day.GamesPlayed</span>
+                                </div>
+                                <span class="bar-label">@day.Day</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Recent Sessions Feed -->
+                <div class="panel sessions-panel">
+                    <div class="panel-header">
+                        <h3><i class="bi bi-clock-history"></i> Recent Sessions</h3>
+                    </div>
+                    <div class="sessions-list">
+                        @foreach (var session in analytics.RecentSessions)
+                        {
+                            var gameClass = GetGameClass(session.GameType);
+                            <div class="session-item">
+                                <div class="session-icon @gameClass">
+                                    <i class="bi @GetGameBootstrapIcon(session.GameType)"></i>
+                                </div>
+                                <div class="session-info">
+                                    <div class="session-header">
+                                        <span class="session-user">
+                                            <i class="bi bi-person"></i> @session.Username
+                                        </span>
+                                        <span class="session-game">@GetGameName(session.GameType)</span>
+                                    </div>
+                                    <div class="session-stats">
+                                        <span class="session-stat">
+                                            <i class="bi bi-star-fill"></i> @session.Score pts
+                                        </span>
+                                        <span class="session-stat">
+                                            <i class="bi bi-bullseye"></i> @session.Accuracy.ToString("F1")%
+                                        </span>
+                                        <span class="session-stat">
+                                            <i class="bi bi-speedometer2"></i> Lvl @session.Difficulty
+                                        </span>
+                                        <span class="session-stat">
+                                            <i class="bi bi-stopwatch"></i> @session.TimeTaken.ToString("F0")s
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="session-time">
+                                    <i class="bi bi-clock"></i>
+                                    @FormatDateTime(session.PlayedAt)
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Insights Bar -->
+        <div class="insights-bar">
+            <div class="insight-item">
+                <i class="bi bi-trophy-fill"></i>
+                <div class="insight-content">
+                    <span class="insight-label">Top Performer</span>
+                    @if (analytics.UserSummaries.Any())
+                    {
+                        var topUser = analytics.UserSummaries.OrderByDescending(u => u.AverageScore).First();
+                        <span class="insight-value">@topUser.Username (@topUser.AverageScore.ToString("F0") pts)</span>
+                    }
+                </div>
+            </div>
+            <div class="insight-item">
+                <i class="bi bi-fire"></i>
+                <div class="insight-content">
+                    <span class="insight-label">Most Active Game</span>
+                    @if (analytics.GameTypeStats.Any())
+                    {
+                        var popularGame = analytics.GameTypeStats.OrderByDescending(g => g.TotalSessions).First();
+                        <span class="insight-value">@popularGame.GameName (@popularGame.TotalSessions sessions)</span>
+                    }
+                </div>
+            </div>
+            <div class="insight-item">
+                <i class="bi bi-clock-fill"></i>
+                <div class="insight-content">
+                    <span class="insight-label">Total Training Time</span>
+                    <span class="insight-value">@FormatTimePlayed(analytics.UserSummaries.Sum(u => u.TotalTimePlayed))</span>
+                </div>
+            </div>
+            <div class="insight-item">
+                <i class="bi bi-bullseye"></i>
+                <div class="insight-content">
+                    <span class="insight-label">Best Accuracy Game</span>
+                    @if (analytics.GameTypeStats.Any())
+                    {
+                        var accurateGame = analytics.GameTypeStats.OrderByDescending(g => g.AverageAccuracy).First();
+                        <span class="insight-value">@accurateGame.GameName (@accurateGame.AverageAccuracy.ToString("F1")%)</span>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="no-data-container">
+            <i class="bi bi-inbox-fill"></i>
+            <h3>No Patient Data Available</h3>
+            <p>Patients need to complete game sessions to see analytics here.</p>
+            <button class="btn-refresh" @onclick="RefreshData">
+                <i class="bi bi-arrow-clockwise"></i> Refresh Data
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    private TherapistAnalyticsDto? analytics;
+    private UserSummaryDto? selectedPatient;
+    private UserAnalysisDto? userAnalysis;
+    private AIAnalysisResponseDto? liveAiAnalysis;
+    private bool isLoading = true;
+    private bool isLoadingAI = false;
+    private bool showUserAnalysis = false;
+    
+    // Activity tracking
+    private List<ActivityTypeStats>? activityStats;
+    private bool isLoadingActivities = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAnalytics();
+        await LoadActivityStats();
+    }
+
+    private async Task LoadActivityStats()
+    {
+        isLoadingActivities = true;
+        try
+        {
+            var baseUri = NavigationManager.BaseUri;
+            activityStats = await Http.GetFromJsonAsync<List<ActivityTypeStats>>($"{baseUri}api/activities/therapist/activity-stats");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading activity stats: {ex.Message}");
+            activityStats = new List<ActivityTypeStats>();
+        }
+        finally
+        {
+            isLoadingActivities = false;
+        }
+    }
+
+    private async Task RefreshActivities()
+    {
+        await LoadActivityStats();
+    }
+
+    private string GetActivityClass(string activityType)
+    {
+        return activityType?.ToLower() switch
+        {
+            "dailyjournal" => "activity-journal",
+            "wordassociation" => "activity-words",
+            "breathingexercise" => "activity-breathing",
+            "storyrecall" => "activity-story",
+            "mentalmath" => "activity-math",
+            "focustracker" => "activity-focus",
+            "wordpuzzles" => "activity-puzzles",
+            "numbersequence" => "activity-numbers",
+            _ => "activity-default"
+        };
+    }
+
+    private string GetActivityIcon(string activityType)
+    {
+        return activityType?.ToLower() switch
+        {
+            "dailyjournal" => "bi-journal-text",
+            "wordassociation" => "bi-link-45deg",
+            "breathingexercise" => "bi-wind",
+            "storyrecall" => "bi-book",
+            "mentalmath" => "bi-calculator",
+            "focustracker" => "bi-eye",
+            "wordpuzzles" => "bi-puzzle",
+            "numbersequence" => "bi-123",
+            _ => "bi-activity"
+        };
+    }
+
+    private string GetActivityName(string activityType)
+    {
+        return activityType switch
+        {
+            "DailyJournal" => "Daily Journal",
+            "WordAssociation" => "Word Association",
+            "BreathingExercise" => "Breathing Exercise",
+            "StoryRecall" => "Story Recall",
+            "MentalMath" => "Mental Math",
+            "FocusTracker" => "Focus Tracker",
+            "WordPuzzles" => "Word Puzzles",
+            "NumberSequence" => "Number Sequence",
+            _ => activityType ?? "Unknown"
+        };
+    }
+
+    private async Task LoadAnalytics()
+    {
+        isLoading = true;
+        try
+        {
+            var baseUri = NavigationManager.BaseUri;
+            analytics = await Http.GetFromJsonAsync<TherapistAnalyticsDto>($"{baseUri}api/json-stats/therapist/analytics");
+            
+            // Auto-select first patient if available
+            if (analytics?.UserSummaries.Any() == true && selectedPatient == null)
+            {
+                selectedPatient = analytics.UserSummaries.First();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading analytics: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        showUserAnalysis = false;
+        userAnalysis = null;
+        await LoadAnalytics();
+    }
+
+    private void SelectPatient(UserSummaryDto patient)
+    {
+        selectedPatient = patient;
+    }
+
+    private async Task ViewUserAnalysis(int userId)
+    {
+        isLoading = true;
+        liveAiAnalysis = null;
+        StateHasChanged();
+        
+        try
+        {
+            var baseUri = NavigationManager.BaseUri;
+            Console.WriteLine($"[DEBUG] Fetching analysis for user {userId} from {baseUri}api/json-stats/therapist/user/{userId}/analysis");
+            
+            userAnalysis = await Http.GetFromJsonAsync<UserAnalysisDto>($"{baseUri}api/json-stats/therapist/user/{userId}/analysis");
+            
+            Console.WriteLine($"[DEBUG] Response received. HasData: {userAnalysis?.HasData}, Username: {userAnalysis?.Username}");
+            
+            if (userAnalysis?.HasData == true)
+            {
+                showUserAnalysis = true;
+                Console.WriteLine($"[DEBUG] showUserAnalysis set to true");
+                
+                // Start AI analysis in background
+                _ = LoadAIAnalysis(userId);
+            }
+            else
+            {
+                Console.WriteLine($"[DEBUG] userAnalysis is null or HasData is false");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DEBUG] Error loading user analysis: {ex.Message}");
+            Console.WriteLine($"[DEBUG] Stack: {ex.StackTrace}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAIAnalysis(int userId)
+    {
+        isLoadingAI = true;
+        StateHasChanged();
+        
+        try
+        {
+            var baseUri = NavigationManager.BaseUri;
+            
+            // Create HttpClient with extended timeout for slow AI responses
+            using var aiHttpClient = new HttpClient();
+            aiHttpClient.Timeout = TimeSpan.FromSeconds(300);  // 5 minutes for slow AI
+            
+            var response = await aiHttpClient.GetAsync($"{baseUri}api/json-stats/therapist/user/{userId}/ai-analysis");
+            if (response.IsSuccessStatusCode)
+            {
+                liveAiAnalysis = await response.Content.ReadFromJsonAsync<AIAnalysisResponseDto>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading AI analysis: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingAI = false;
+            StateHasChanged();
+        }
+    }
+
+    private void BackToOverview()
+    {
+        showUserAnalysis = false;
+        userAnalysis = null;
+        liveAiAnalysis = null;
+    }
+
+    private string GetGameClass(string gameType)
+    {
+        return gameType?.ToLower() switch
+        {
+            "memorymatch" => "memory-match",
+            "reactiontrainer" => "reaction-trainer",
+            "sortingtask" => "sorting-task",
+            "trailmaking" => "trail-making",
+            "dualtask" => "dual-task",
+            "strooptest" => "stroop-test",
+            _ => "default-game"
+        };
+    }
+
+    private string GetGameBootstrapIcon(string gameType)
+    {
+        return gameType?.ToLower() switch
+        {
+            "memorymatch" => "bi-grid-3x3-gap-fill",
+            "reactiontrainer" => "bi-lightning-charge-fill",
+            "sortingtask" => "bi-sort-down",
+            "trailmaking" => "bi-bezier2",
+            "dualtask" => "bi-diagram-3",
+            "strooptest" => "bi-palette",
+            _ => "bi-controller"
+        };
+    }
+
+    private string GetGameName(string gameType)
+    {
+        return gameType?.ToLower() switch
+        {
+            "memorymatch" => "Memory Match",
+            "reactiontrainer" => "Reaction Trainer",
+            "sortingtask" => "Sorting Task",
+            "trailmaking" => "Trail Making",
+            "dualtask" => "Dual Task Training",
+            "strooptest" => "Stroop Test",
+            _ => gameType ?? "Unknown"
+        };
+    }
+
+    private string GetProgressClass(string? trend)
+    {
+        return trend?.ToLower() switch
+        {
+            "improving" => "improving",
+            "declining" => "declining",
+            "stable" => "stable",
+            _ => "stable"
+        };
+    }
+
+    private string GetTrendIcon(string? trend)
+    {
+        return trend?.ToLower() switch
+        {
+            "improving" => "bi-arrow-up-circle-fill",
+            "declining" => "bi-arrow-down-circle-fill",
+            "stable" => "bi-dash-circle-fill",
+            _ => "bi-dash-circle-fill"
+        };
+    }
+
+    private string FormatTimePlayed(double seconds)
+    {
+        var ts = TimeSpan.FromSeconds(seconds);
+        if (ts.TotalHours >= 1)
+            return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        if (ts.TotalMinutes >= 1)
+            return $"{ts.Minutes}m {ts.Seconds}s";
+        return $"{ts.Seconds}s";
+    }
+
+    private string FormatDate(DateTime? date)
+    {
+        if (!date.HasValue) return "Never";
+        var diff = DateTime.UtcNow - date.Value;
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
+        return date.Value.ToString("MMM d");
+    }
+
+    private string FormatDateTime(DateTime date)
+    {
+        var diff = DateTime.UtcNow - date;
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        return date.ToString("MMM d, h:mm tt");
+    }
+
+    private string GetRiskClass(string riskLevel)
+    {
+        return riskLevel?.ToLower() switch
+        {
+            "high" => "risk-high",
+            "moderate" => "risk-moderate",
+            "low" => "risk-low",
+            _ => "risk-low"
+        };
+    }
+
+    private string GetMotivationClass(string motivation)
+    {
+        return motivation?.ToLower() switch
+        {
+            "positive" => "motivation-positive",
+            "declining" => "motivation-declining",
+            "stable" => "motivation-stable",
+            _ => "motivation-stable"
+        };
+    }
+
+    // DTOs
+    public class ActivityTypeStats
+    {
+        [JsonPropertyName("activityType")]
+        public string ActivityType { get; set; } = string.Empty;
+        [JsonPropertyName("totalSessions")]
+        public int TotalSessions { get; set; }
+        [JsonPropertyName("totalUsers")]
+        public int TotalUsers { get; set; }
+        [JsonPropertyName("averageScore")]
+        public double AverageScore { get; set; }
+        [JsonPropertyName("averageAccuracy")]
+        public double AverageAccuracy { get; set; }
+        [JsonPropertyName("averageDuration")]
+        public double AverageDuration { get; set; }
+    }
+
+    public class TherapistAnalyticsDto
+    {
+        [JsonPropertyName("totalUsers")]
+        public int TotalUsers { get; set; }
+        [JsonPropertyName("totalSessions")]
+        public int TotalSessions { get; set; }
+        [JsonPropertyName("overallAccuracy")]
+        public double OverallAccuracy { get; set; }
+        [JsonPropertyName("averageScore")]
+        public double AverageScore { get; set; }
+        [JsonPropertyName("gameTypeStats")]
+        public List<GameTypeStatsDto> GameTypeStats { get; set; } = new();
+        [JsonPropertyName("userSummaries")]
+        public List<UserSummaryDto> UserSummaries { get; set; } = new();
+        [JsonPropertyName("recentSessions")]
+        public List<RecentSessionDto> RecentSessions { get; set; } = new();
+        [JsonPropertyName("weeklyActivity")]
+        public List<WeeklyActivityDto> WeeklyActivity { get; set; } = new();
+    }
+
+    public class GameTypeStatsDto
+    {
+        [JsonPropertyName("gameType")]
+        public string GameType { get; set; } = string.Empty;
+        [JsonPropertyName("gameName")]
+        public string GameName { get; set; } = string.Empty;
+        [JsonPropertyName("totalSessions")]
+        public int TotalSessions { get; set; }
+        [JsonPropertyName("averageScore")]
+        public double AverageScore { get; set; }
+        [JsonPropertyName("averageAccuracy")]
+        public double AverageAccuracy { get; set; }
+        [JsonPropertyName("bestScore")]
+        public int BestScore { get; set; }
+        [JsonPropertyName("averageMoves")]
+        public double AverageMoves { get; set; }
+        [JsonPropertyName("averageReactionTime")]
+        public double AverageReactionTime { get; set; }
+    }
+
+    public class UserSummaryDto
+    {
+        [JsonPropertyName("userId")]
+        public int UserId { get; set; }
+        [JsonPropertyName("username")]
+        public string Username { get; set; } = string.Empty;
+        [JsonPropertyName("totalSessions")]
+        public int TotalSessions { get; set; }
+        [JsonPropertyName("averageScore")]
+        public double AverageScore { get; set; }
+        [JsonPropertyName("averageAccuracy")]
+        public double AverageAccuracy { get; set; }
+        [JsonPropertyName("bestScore")]
+        public int BestScore { get; set; }
+        [JsonPropertyName("totalTimePlayed")]
+        public double TotalTimePlayed { get; set; }
+        [JsonPropertyName("lastPlayed")]
+        public DateTime? LastPlayed { get; set; }
+        [JsonPropertyName("progressTrend")]
+        public string? ProgressTrend { get; set; }
+    }
+
+    public class RecentSessionDto
+    {
+        [JsonPropertyName("userId")]
+        public int UserId { get; set; }
+        [JsonPropertyName("username")]
+        public string Username { get; set; } = string.Empty;
+        [JsonPropertyName("gameType")]
+        public string GameType { get; set; } = string.Empty;
+        [JsonPropertyName("score")]
+        public int Score { get; set; }
+        [JsonPropertyName("accuracy")]
+        public double Accuracy { get; set; }
+        [JsonPropertyName("difficulty")]
+        public int Difficulty { get; set; }
+        [JsonPropertyName("timeTaken")]
+        public double TimeTaken { get; set; }
+        [JsonPropertyName("playedAt")]
+        public DateTime PlayedAt { get; set; }
+    }
+
+    public class WeeklyActivityDto
+    {
+        [JsonPropertyName("day")]
+        public string Day { get; set; } = string.Empty;
+        [JsonPropertyName("gamesPlayed")]
+        public int GamesPlayed { get; set; }
+        [JsonPropertyName("heightPercent")]
+        public double HeightPercent { get; set; }
+    }
+
+    // User Analysis DTOs
+    public class UserAnalysisDto
+    {
+        [JsonPropertyName("hasData")]
+        public bool HasData { get; set; }
+        [JsonPropertyName("userId")]
+        public int UserId { get; set; }
+        [JsonPropertyName("username")]
+        public string Username { get; set; } = string.Empty;
+        [JsonPropertyName("summary")]
+        public UserAnalysisSummary Summary { get; set; } = new();
+        [JsonPropertyName("gameBreakdown")]
+        public List<GameBreakdownDto> GameBreakdown { get; set; } = new();
+        [JsonPropertyName("weeklyPerformance")]
+        public List<WeeklyPerformanceDto> WeeklyPerformance { get; set; } = new();
+        [JsonPropertyName("dailyPattern")]
+        public List<DailyPatternDto> DailyPattern { get; set; } = new();
+        [JsonPropertyName("difficultyProgression")]
+        public List<DifficultyProgressionDto> DifficultyProgression { get; set; } = new();
+        [JsonPropertyName("strengths")]
+        public List<StrengthDto> Strengths { get; set; } = new();
+        [JsonPropertyName("areasForImprovement")]
+        public List<ImprovementAreaDto> AreasForImprovement { get; set; } = new();
+        [JsonPropertyName("recentSessions")]
+        public List<AnalysisSessionDto> RecentSessions { get; set; } = new();
+        [JsonPropertyName("recommendations")]
+        public List<string> Recommendations { get; set; } = new();
+        [JsonPropertyName("aiAnalysis")]
+        public AIAnalysisDto? AiAnalysis { get; set; }
+    }
+
+    public class AIAnalysisDto
+    {
+        [JsonPropertyName("cognitiveProfile")]
+        public string CognitiveProfile { get; set; } = string.Empty;
+        [JsonPropertyName("performanceSummary")]
+        public string PerformanceSummary { get; set; } = string.Empty;
+        [JsonPropertyName("cognitiveAssessment")]
+        public string CognitiveAssessment { get; set; } = string.Empty;
+        [JsonPropertyName("progressAnalysis")]
+        public string ProgressAnalysis { get; set; } = string.Empty;
+        [JsonPropertyName("therapyRecommendations")]
+        public List<string> TherapyRecommendations { get; set; } = new();
+        [JsonPropertyName("nextSteps")]
+        public List<string> NextSteps { get; set; } = new();
+        [JsonPropertyName("riskLevel")]
+        public string RiskLevel { get; set; } = string.Empty;
+        [JsonPropertyName("riskAssessment")]
+        public string RiskAssessment { get; set; } = string.Empty;
+        [JsonPropertyName("engagementScore")]
+        public int EngagementScore { get; set; }
+        [JsonPropertyName("motivationIndex")]
+        public string MotivationIndex { get; set; } = string.Empty;
+        [JsonPropertyName("generatedAt")]
+        public DateTime GeneratedAt { get; set; }
+    }
+
+    // Live AI Analysis Response (from Phi-4-mini)
+    public class AIAnalysisResponseDto
+    {
+        [JsonPropertyName("success")]
+        public bool Success { get; set; }
+        [JsonPropertyName("userId")]
+        public int UserId { get; set; }
+        [JsonPropertyName("username")]
+        public string Username { get; set; } = string.Empty;
+        [JsonPropertyName("totalSessions")]
+        public int TotalSessions { get; set; }
+        [JsonPropertyName("aiAnalysis")]
+        public LiveAIAnalysisDto? AiAnalysis { get; set; }
+    }
+
+    public class LiveAIAnalysisDto
+    {
+        [JsonPropertyName("overallAssessment")]
+        public string OverallAssessment { get; set; } = string.Empty;
+        [JsonPropertyName("memoryAnalysis")]
+        public string MemoryAnalysis { get; set; } = string.Empty;
+        [JsonPropertyName("reactionAnalysis")]
+        public string ReactionAnalysis { get; set; } = string.Empty;
+        [JsonPropertyName("sortingAnalysis")]
+        public string SortingAnalysis { get; set; } = string.Empty;
+        [JsonPropertyName("patternAnalysis")]
+        public string PatternAnalysis { get; set; } = string.Empty;
+        [JsonPropertyName("cognitiveStrengths")]
+        public List<string> CognitiveStrengths { get; set; } = new();
+        [JsonPropertyName("areasOfConcern")]
+        public List<string> AreasOfConcern { get; set; } = new();
+        [JsonPropertyName("progressSummary")]
+        public string ProgressSummary { get; set; } = string.Empty;
+        [JsonPropertyName("therapyRecommendations")]
+        public List<string> TherapyRecommendations { get; set; } = new();
+        [JsonPropertyName("nextSessionFocus")]
+        public string NextSessionFocus { get; set; } = string.Empty;
+        [JsonPropertyName("riskLevel")]
+        public string RiskLevel { get; set; } = string.Empty;
+        [JsonPropertyName("encouragingNote")]
+        public string EncouragingNote { get; set; } = string.Empty;
+        [JsonPropertyName("generatedAt")]
+        public DateTime GeneratedAt { get; set; }
+        [JsonPropertyName("source")]
+        public string Source { get; set; } = string.Empty;
+    }
+
+    public class UserAnalysisSummary
+    {
+        [JsonPropertyName("totalSessions")]
+        public int TotalSessions { get; set; }
+        [JsonPropertyName("totalGamesTypes")]
+        public int TotalGamesTypes { get; set; }
+        [JsonPropertyName("totalTimePlayed")]
+        public double TotalTimePlayed { get; set; }
+        [JsonPropertyName("averageScore")]
+        public double AverageScore { get; set; }
+        [JsonPropertyName("averageAccuracy")]
+        public double AverageAccuracy { get; set; }
+        [JsonPropertyName("bestScore")]
+        public int BestScore { get; set; }
+        [JsonPropertyName("firstSession")]
+        public DateTime FirstSession { get; set; }
+        [JsonPropertyName("lastSession")]
+        public DateTime LastSession { get; set; }
+        [JsonPropertyName("overallImprovement")]
+        public double OverallImprovement { get; set; }
+        [JsonPropertyName("overallTrend")]
+        public string OverallTrend { get; set; } = "Stable";
+    }
+
+    public class GameBreakdownDto
+    {
+        [JsonPropertyName("gameType")]
+        public string GameType { get; set; } = string.Empty;
+        [JsonPropertyName("gameName")]
+        public string GameName { get; set; } = string.Empty;
+        [JsonPropertyName("totalSessions")]
+        public int TotalSessions { get; set; }
+        [JsonPropertyName("averageScore")]
+        public double AverageScore { get; set; }
+        [JsonPropertyName("averageAccuracy")]
+        public double AverageAccuracy { get; set; }
+        [JsonPropertyName("bestScore")]
+        public int BestScore { get; set; }
+        [JsonPropertyName("worstScore")]
+        public int WorstScore { get; set; }
+        [JsonPropertyName("totalTimePlayed")]
+        public double TotalTimePlayed { get; set; }
+        [JsonPropertyName("averageTimeTaken")]
+        public double AverageTimeTaken { get; set; }
+        [JsonPropertyName("averageMoves")]
+        public double AverageMoves { get; set; }
+        [JsonPropertyName("averageReactionTime")]
+        public double AverageReactionTime { get; set; }
+        [JsonPropertyName("maxDifficulty")]
+        public int MaxDifficulty { get; set; }
+        [JsonPropertyName("improvement")]
+        public double Improvement { get; set; }
+        [JsonPropertyName("trend")]
+        public string Trend { get; set; } = "Stable";
+    }
+
+    public class WeeklyPerformanceDto
+    {
+        [JsonPropertyName("weekLabel")]
+        public string WeekLabel { get; set; } = string.Empty;
+        [JsonPropertyName("averageScore")]
+        public double AverageScore { get; set; }
+        [JsonPropertyName("averageAccuracy")]
+        public double AverageAccuracy { get; set; }
+        [JsonPropertyName("sessionsPlayed")]
+        public int SessionsPlayed { get; set; }
+    }
+
+    public class DailyPatternDto
+    {
+        [JsonPropertyName("day")]
+        public string Day { get; set; } = string.Empty;
+        [JsonPropertyName("dayIndex")]
+        public int DayIndex { get; set; }
+        [JsonPropertyName("sessionsPlayed")]
+        public int SessionsPlayed { get; set; }
+        [JsonPropertyName("averageScore")]
+        public double AverageScore { get; set; }
+    }
+
+    public class DifficultyProgressionDto
+    {
+        [JsonPropertyName("difficulty")]
+        public int Difficulty { get; set; }
+        [JsonPropertyName("difficultyName")]
+        public string DifficultyName { get; set; } = string.Empty;
+        [JsonPropertyName("sessionsPlayed")]
+        public int SessionsPlayed { get; set; }
+        [JsonPropertyName("averageScore")]
+        public double AverageScore { get; set; }
+        [JsonPropertyName("averageAccuracy")]
+        public double AverageAccuracy { get; set; }
+        [JsonPropertyName("successRate")]
+        public double SuccessRate { get; set; }
+    }
+
+    public class StrengthDto
+    {
+        [JsonPropertyName("area")]
+        public string Area { get; set; } = string.Empty;
+        [JsonPropertyName("score")]
+        public double Score { get; set; }
+        [JsonPropertyName("description")]
+        public string Description { get; set; } = string.Empty;
+    }
+
+    public class ImprovementAreaDto
+    {
+        [JsonPropertyName("area")]
+        public string Area { get; set; } = string.Empty;
+        [JsonPropertyName("score")]
+        public double Score { get; set; }
+        [JsonPropertyName("suggestion")]
+        public string Suggestion { get; set; } = string.Empty;
+    }
+
+    public class AnalysisSessionDto
+    {
+        [JsonPropertyName("gameType")]
+        public string GameType { get; set; } = string.Empty;
+        [JsonPropertyName("gameName")]
+        public string GameName { get; set; } = string.Empty;
+        [JsonPropertyName("score")]
+        public int Score { get; set; }
+        [JsonPropertyName("accuracy")]
+        public double Accuracy { get; set; }
+        [JsonPropertyName("difficulty")]
+        public int Difficulty { get; set; }
+        [JsonPropertyName("timeTaken")]
+        public double TimeTaken { get; set; }
+        [JsonPropertyName("playedAt")]
+        public DateTime PlayedAt { get; set; }
+    }
+}
+
+<style>
+    /* ===== CSS Variables ===== */
+    :root {
+        --primary: #0f766e;
+        --primary-light: #14b8a6;
+        --secondary: #7c3aed;
+        --secondary-light: #a78bfa;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --info: #3b82f6;
+        --dark: #1f2937;
+        --gray: #6b7280;
+        --light-gray: #e5e7eb;
+        --bg: #f8fafc;
+        --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        --card-hover: 0 20px 40px rgba(0, 0, 0, 0.12);
+        --radius: 16px;
+        --radius-sm: 12px;
+    }
+
+    /* ===== Animations ===== */
+    @@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    @@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+    @@keyframes spin { to { transform: rotate(360deg); } }
+    @@keyframes fillBar { from { width: 0; } to { width: var(--percent, 100%); } }
+    @@keyframes barGrow { from { height: 0; } to { height: var(--height); } }
+
+    /* ===== Container ===== */
+    .therapist-container {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 1.5rem;
+        background: var(--bg);
+        min-height: 100vh;
+    }
+
+    /* ===== Hero Section ===== */
+    .hero-section {
+        background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+        border-radius: var(--radius);
+        padding: 2rem 2.5rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: white;
+        position: relative;
+        overflow: hidden;
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    .hero-section::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -5%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+
+    .hero-title {
+        font-size: 2rem;
+        font-weight: 700;
+        margin: 0 0 0.5rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .hero-title i { font-size: 1.75rem; }
+    .hero-subtitle { font-size: 1rem; opacity: 0.9; margin: 0; }
+
+    .btn-refresh {
+        background: rgba(255,255,255,0.2);
+        border: 1px solid rgba(255,255,255,0.3);
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: var(--radius-sm);
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+    }
+
+    .btn-refresh:hover {
+        background: rgba(255,255,255,0.3);
+        transform: translateY(-2px);
+    }
+
+    /* ===== Loading ===== */
+    .loading-container {
+        text-align: center;
+        padding: 4rem;
+        color: var(--gray);
+    }
+
+    .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 4px solid var(--light-gray);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+    }
+
+    /* ===== Stats Overview ===== */
+    .stats-overview {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        box-shadow: var(--card-shadow);
+        animation: slideUp 0.5s ease-out backwards;
+        animation-delay: var(--delay);
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: var(--card-hover);
+    }
+
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 4px;
+        height: 100%;
+    }
+
+    .stat-card.patients::before { background: var(--info); }
+    .stat-card.sessions::before { background: var(--secondary); }
+    .stat-card.accuracy::before { background: var(--success); }
+    .stat-card.score::before { background: var(--warning); }
+
+    .stat-icon {
+        width: 56px;
+        height: 56px;
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+    }
+
+    .stat-card.patients .stat-icon { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: var(--info); }
+    .stat-card.sessions .stat-icon { background: linear-gradient(135deg, #ede9fe, #ddd6fe); color: var(--secondary); }
+    .stat-card.accuracy .stat-icon { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: var(--success); }
+    .stat-card.score .stat-icon { background: linear-gradient(135deg, #fef3c7, #fde68a); color: var(--warning); }
+
+    .stat-info { flex: 1; }
+    .stat-value { display: block; font-size: 1.75rem; font-weight: 700; color: var(--dark); }
+    .stat-label { display: block; font-size: 0.8rem; color: var(--gray); margin-top: 0.25rem; }
+
+    .stat-trend {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+    }
+
+    .stat-trend.up { background: #d1fae5; color: var(--success); }
+    .stat-trend.neutral { background: var(--light-gray); color: var(--gray); }
+
+    .stat-indicator { flex: 0 0 60px; }
+
+    .mini-progress {
+        height: 6px;
+        background: var(--light-gray);
+        border-radius: 3px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .mini-progress::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: var(--percent);
+        background: linear-gradient(90deg, var(--success), var(--primary));
+        border-radius: 3px;
+        animation: fillBar 1s ease-out forwards;
+    }
+
+    /* ===== Dashboard Grid ===== */
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: 380px 1fr;
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    /* ===== Panels ===== */
+    .panel {
+        background: white;
+        border-radius: var(--radius);
+        box-shadow: var(--card-shadow);
+        overflow: hidden;
+        animation: slideUp 0.5s ease-out;
+    }
+
+    .panel-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--light-gray);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .panel-header h3 {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--dark);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .panel-header h3 i { color: var(--primary); }
+    .patient-count { font-size: 0.8rem; color: var(--gray); background: var(--bg); padding: 0.25rem 0.75rem; border-radius: 999px; }
+
+    /* ===== Patient List ===== */
+    .patient-list {
+        max-height: 320px;
+        overflow-y: auto;
+    }
+
+    .patient-item {
+        padding: 1rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    .patient-item:hover { background: #f8fafc; }
+    .patient-item.selected { background: linear-gradient(135deg, #f0fdfa, #e0f2fe); border-left: 3px solid var(--primary); }
+
+    .patient-avatar {
+        position: relative;
+        font-size: 2.5rem;
+        color: var(--gray);
+    }
+
+    .status-dot {
+        position: absolute;
+        bottom: 2px;
+        right: 2px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid white;
+    }
+
+    .status-dot.improving { background: var(--success); }
+    .status-dot.declining { background: var(--danger); }
+    .status-dot.stable { background: var(--warning); }
+
+    .patient-info { flex: 1; }
+    .patient-name { display: block; font-weight: 600; color: var(--dark); font-size: 0.95rem; }
+    .patient-meta { display: block; font-size: 0.75rem; color: var(--gray); margin-top: 0.25rem; }
+    .patient-meta i { margin-right: 0.25rem; }
+
+    .patient-quick-stats { text-align: right; }
+    .quick-stat { display: block; font-size: 0.8rem; color: var(--gray); margin-bottom: 0.25rem; }
+    .quick-stat i { color: var(--warning); }
+
+    .trend-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.7rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 999px;
+        font-weight: 500;
+    }
+
+    .trend-badge.improving { background: #d1fae5; color: var(--success); }
+    .trend-badge.declining { background: #fee2e2; color: var(--danger); }
+    .trend-badge.stable { background: #fef3c7; color: #b45309; }
+
+    /* ===== Patient Details Panel ===== */
+    .patient-details-panel { margin-top: 1.5rem; }
+
+    .patient-profile { padding: 1.5rem; }
+
+    .profile-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid var(--light-gray);
+    }
+
+    .profile-avatar.large { font-size: 3.5rem; color: var(--primary); }
+    .profile-name h4 { margin: 0; font-size: 1.25rem; color: var(--dark); }
+    .profile-id { font-size: 0.8rem; color: var(--gray); }
+
+    .profile-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .profile-stat {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1rem;
+        background: var(--bg);
+        border-radius: var(--radius-sm);
+    }
+
+    .profile-stat i { font-size: 1.5rem; color: var(--primary); }
+    .profile-stat .value { display: block; font-size: 1.25rem; font-weight: 700; color: var(--dark); }
+    .profile-stat .label { display: block; font-size: 0.7rem; color: var(--gray); text-transform: uppercase; }
+    .profile-stat.highlight { background: linear-gradient(135deg, #fef3c7, #fde68a); }
+    .profile-stat.highlight i { color: var(--warning); }
+
+    .profile-progress { margin-bottom: 1.5rem; }
+    .progress-header { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--gray); }
+    .progress-value { font-weight: 600; color: var(--dark); }
+
+    .progress-bar-container {
+        height: 10px;
+        background: var(--light-gray);
+        border-radius: 5px;
+        overflow: hidden;
+    }
+
+    .progress-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        border-radius: 5px;
+        transition: width 0.5s ease;
+    }
+
+    .profile-meta { display: flex; flex-direction: column; gap: 0.5rem; }
+    .meta-item { font-size: 0.85rem; color: var(--gray); display: flex; align-items: center; gap: 0.5rem; }
+    .meta-item i { color: var(--primary); }
+    .meta-item strong.improving { color: var(--success); }
+    .meta-item strong.declining { color: var(--danger); }
+    .meta-item strong.stable { color: var(--warning); }
+
+    /* ===== Right Column ===== */
+    .right-column { display: flex; flex-direction: column; gap: 1.5rem; }
+
+    /* ===== Games Panel ===== */
+    .games-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+        padding: 1.5rem;
+    }
+
+    .game-card {
+        background: var(--bg);
+        border-radius: var(--radius-sm);
+        padding: 1.25rem;
+        transition: all 0.3s ease;
+        border: 1px solid transparent;
+    }
+
+    .game-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+
+    .game-card.memory-match { border-color: #a78bfa; }
+    .game-card.reaction-trainer { border-color: #fbbf24; }
+    .game-card.sorting-task { border-color: #34d399; }
+    .game-card.trail-making { border-color: #38bdf8; }
+    .game-card.dual-task { border-color: #f472b6; }
+    .game-card.stroop-test { border-color: #c084fc; }
+
+    .game-card-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+
+    .game-icon-wrapper {
+        width: 48px;
+        height: 48px;
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+    }
+
+    .game-card.memory-match .game-icon-wrapper { background: linear-gradient(135deg, #ede9fe, #ddd6fe); color: #7c3aed; }
+    .game-card.reaction-trainer .game-icon-wrapper { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #d97706; }
+    .game-card.sorting-task .game-icon-wrapper { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #059669; }
+    .game-card.trail-making .game-icon-wrapper { background: linear-gradient(135deg, #e0f2fe, #bae6fd); color: #0284c7; }
+    .game-card.dual-task .game-icon-wrapper { background: linear-gradient(135deg, #fce7f3, #fbcfe8); color: #be185d; }
+    .game-card.stroop-test .game-icon-wrapper { background: linear-gradient(135deg, #f3e8ff, #e9d5ff); color: #9333ea; }
+
+    .game-title h4 { margin: 0; font-size: 1rem; color: var(--dark); }
+    .session-count { font-size: 0.75rem; color: var(--gray); }
+
+    .game-card-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; margin-bottom: 1rem; }
+
+    .game-stat {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem;
+        background: white;
+        border-radius: 8px;
+    }
+
+    .game-stat .stat-label { font-size: 0.7rem; color: var(--gray); display: flex; align-items: center; gap: 0.25rem; }
+    .game-stat .stat-value { font-size: 0.9rem; font-weight: 600; color: var(--dark); }
+    .game-stat .stat-value.highlight { color: var(--warning); }
+
+    .game-card-progress {
+        height: 4px;
+        background: rgba(0,0,0,0.1);
+        border-radius: 2px;
+        overflow: hidden;
+    }
+
+    .game-card-progress .progress-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+    .game-card.memory-match .game-card-progress .progress-fill { background: linear-gradient(90deg, #a78bfa, #7c3aed); }
+    .game-card.reaction-trainer .game-card-progress .progress-fill { background: linear-gradient(90deg, #fbbf24, #d97706); }
+    .game-card.sorting-task .game-card-progress .progress-fill { background: linear-gradient(90deg, #34d399, #059669); }
+    .game-card.trail-making .game-card-progress .progress-fill { background: linear-gradient(90deg, #38bdf8, #0284c7); }
+    .game-card.dual-task .game-card-progress .progress-fill { background: linear-gradient(90deg, #f472b6, #be185d); }
+    .game-card.stroop-test .game-card-progress .progress-fill { background: linear-gradient(90deg, #c084fc, #9333ea); }
+
+    /* ===== Activities Panel ===== */
+    .activities-panel { background: var(--card-bg); border-radius: var(--radius); }
+    .activities-panel .panel-header { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid var(--border);
+    }
+    .activities-panel .panel-header h3 { margin: 0; }
+    
+    .btn-refresh-sm {
+        background: none;
+        border: none;
+        color: var(--gray);
+        cursor: pointer;
+        padding: 0.5rem;
+        border-radius: 50%;
+        transition: all 0.2s ease;
+    }
+    .btn-refresh-sm:hover { background: var(--bg); color: var(--primary); }
+    .btn-refresh-sm:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-refresh-sm .spinning { animation: spin 1s linear infinite; }
+    
+    .loading-activities {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        padding: 2rem;
+        color: var(--gray);
+    }
+    .loading-spinner-sm {
+        width: 20px;
+        height: 20px;
+        border: 2px solid var(--border);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    .activities-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+        padding: 1.5rem;
+    }
+
+    .activity-card {
+        background: var(--bg);
+        border-radius: var(--radius-sm);
+        padding: 1.25rem;
+        transition: all 0.3s ease;
+        border: 1px solid transparent;
+    }
+    .activity-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+
+    /* Activity type colors */
+    .activity-card.activity-journal { border-color: #60a5fa; }
+    .activity-card.activity-words { border-color: #f472b6; }
+    .activity-card.activity-breathing { border-color: #22d3d1; }
+    .activity-card.activity-story { border-color: #818cf8; }
+    .activity-card.activity-math { border-color: #fb923c; }
+    .activity-card.activity-focus { border-color: #4ade80; }
+    .activity-card.activity-puzzles { border-color: #e879f9; }
+    .activity-card.activity-numbers { border-color: #facc15; }
+
+    .activity-card-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+
+    .activity-icon-wrapper {
+        width: 48px;
+        height: 48px;
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+    }
+
+    .activity-card.activity-journal .activity-icon-wrapper { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #2563eb; }
+    .activity-card.activity-words .activity-icon-wrapper { background: linear-gradient(135deg, #fce7f3, #fbcfe8); color: #db2777; }
+    .activity-card.activity-breathing .activity-icon-wrapper { background: linear-gradient(135deg, #ccfbf1, #99f6e4); color: #0d9488; }
+    .activity-card.activity-story .activity-icon-wrapper { background: linear-gradient(135deg, #e0e7ff, #c7d2fe); color: #4f46e5; }
+    .activity-card.activity-math .activity-icon-wrapper { background: linear-gradient(135deg, #ffedd5, #fed7aa); color: #ea580c; }
+    .activity-card.activity-focus .activity-icon-wrapper { background: linear-gradient(135deg, #dcfce7, #bbf7d0); color: #16a34a; }
+    .activity-card.activity-puzzles .activity-icon-wrapper { background: linear-gradient(135deg, #fae8ff, #f5d0fe); color: #c026d3; }
+    .activity-card.activity-numbers .activity-icon-wrapper { background: linear-gradient(135deg, #fef9c3, #fef08a); color: #ca8a04; }
+
+    .activity-title h4 { margin: 0; font-size: 1rem; color: var(--dark); }
+    
+    .activity-card-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 1rem; }
+
+    .activity-stat {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 0.5rem;
+        background: white;
+        border-radius: 8px;
+    }
+    .activity-stat .stat-label { font-size: 0.65rem; color: var(--gray); display: flex; align-items: center; gap: 0.25rem; }
+    .activity-stat .stat-value { font-size: 0.85rem; font-weight: 600; color: var(--dark); }
+
+    .activity-card-progress {
+        height: 4px;
+        background: rgba(0,0,0,0.1);
+        border-radius: 2px;
+        overflow: hidden;
+    }
+    .activity-card-progress .progress-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+    
+    .activity-card.activity-journal .activity-card-progress .progress-fill { background: linear-gradient(90deg, #60a5fa, #2563eb); }
+    .activity-card.activity-words .activity-card-progress .progress-fill { background: linear-gradient(90deg, #f472b6, #db2777); }
+    .activity-card.activity-breathing .activity-card-progress .progress-fill { background: linear-gradient(90deg, #22d3d1, #0d9488); }
+    .activity-card.activity-story .activity-card-progress .progress-fill { background: linear-gradient(90deg, #818cf8, #4f46e5); }
+    .activity-card.activity-math .activity-card-progress .progress-fill { background: linear-gradient(90deg, #fb923c, #ea580c); }
+    .activity-card.activity-focus .activity-card-progress .progress-fill { background: linear-gradient(90deg, #4ade80, #16a34a); }
+    .activity-card.activity-puzzles .activity-card-progress .progress-fill { background: linear-gradient(90deg, #e879f9, #c026d3); }
+    .activity-card.activity-numbers .activity-card-progress .progress-fill { background: linear-gradient(90deg, #facc15, #ca8a04); }
+
+    .no-activities {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2.5rem 1.5rem;
+        color: var(--gray);
+        text-align: center;
+    }
+    .no-activities i { font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.5; }
+    .no-activities p { margin: 0; font-size: 0.9rem; }
+
+    /* ===== Weekly Chart ===== */
+    .activity-chart-panel .panel-header { border-bottom: none; }
+
+    .weekly-chart {
+        display: flex;
+        justify-content: space-around;
+        align-items: flex-end;
+        height: 180px;
+        padding: 1rem 1.5rem 1.5rem;
+    }
+
+    .chart-bar-wrapper { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+
+    .chart-bar {
+        width: 40px;
+        background: linear-gradient(180deg, var(--primary), var(--secondary));
+        border-radius: 8px 8px 0 0;
+        height: var(--height);
+        min-height: 20px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 0.5rem;
+        animation: barGrow 0.8s ease-out forwards;
+        position: relative;
+    }
+
+    .bar-value {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: white;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+
+    .bar-label { font-size: 0.75rem; color: var(--gray); font-weight: 500; }
+
+    /* ===== Sessions Panel ===== */
+    .sessions-list { max-height: 300px; overflow-y: auto; }
+
+    .session-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid #f3f4f6;
+        transition: background 0.2s ease;
+    }
+
+    .session-item:hover { background: #f8fafc; }
+
+    .session-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+    }
+
+    .session-icon.memory-match { background: linear-gradient(135deg, #ede9fe, #ddd6fe); color: #7c3aed; }
+    .session-icon.reaction-trainer { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #d97706; }
+    .session-icon.sorting-task { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #059669; }
+    .session-icon.trail-making { background: linear-gradient(135deg, #e0f2fe, #bae6fd); color: #0284c7; }
+    .session-icon.dual-task { background: linear-gradient(135deg, #fce7f3, #fbcfe8); color: #be185d; }
+    .session-icon.stroop-test { background: linear-gradient(135deg, #f3e8ff, #e9d5ff); color: #9333ea; }
+
+    .session-info { flex: 1; }
+    .session-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem; }
+    .session-user { font-weight: 600; color: var(--dark); font-size: 0.9rem; }
+    .session-user i { color: var(--primary); margin-right: 0.25rem; }
+    .session-game { font-size: 0.75rem; color: var(--gray); background: var(--bg); padding: 0.2rem 0.5rem; border-radius: 999px; }
+
+    .session-stats { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .session-stat { font-size: 0.75rem; color: var(--gray); display: flex; align-items: center; gap: 0.25rem; }
+    .session-stat i { color: var(--primary); }
+
+    .session-time { font-size: 0.7rem; color: var(--gray); text-align: right; white-space: nowrap; }
+    .session-time i { margin-right: 0.25rem; }
+
+    /* ===== Insights Bar ===== */
+    .insights-bar {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1.25rem;
+        background: white;
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        box-shadow: var(--card-shadow);
+        animation: slideUp 0.5s ease-out;
+    }
+
+    .insight-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.75rem;
+        background: var(--bg);
+        border-radius: var(--radius-sm);
+    }
+
+    .insight-item i { font-size: 1.75rem; color: var(--primary); }
+    .insight-content { flex: 1; }
+    .insight-label { display: block; font-size: 0.7rem; color: var(--gray); text-transform: uppercase; letter-spacing: 0.5px; }
+    .insight-value { display: block; font-size: 0.9rem; font-weight: 600; color: var(--dark); margin-top: 0.25rem; }
+
+    /* ===== No Data ===== */
+    .no-data-container {
+        text-align: center;
+        padding: 4rem 2rem;
+        background: white;
+        border-radius: var(--radius);
+        box-shadow: var(--card-shadow);
+    }
+
+    .no-data-container i { font-size: 4rem; color: var(--light-gray); margin-bottom: 1rem; display: block; }
+    .no-data-container h3 { font-size: 1.5rem; color: var(--dark); margin: 0 0 0.5rem 0; }
+    .no-data-container p { color: var(--gray); margin: 0 0 1.5rem 0; }
+
+    /* ===== Patient Actions ===== */
+    .patient-actions { display: flex; gap: 0.5rem; }
+
+    .btn-analyze {
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        border: none;
+        color: white;
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        transition: all 0.3s ease;
+    }
+
+    .btn-analyze:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+    }
+
+    .btn-back {
+        background: rgba(255,255,255,0.2);
+        border: 1px solid rgba(255,255,255,0.3);
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: var(--radius-sm);
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+        margin-right: 0.75rem;
+    }
+
+    .btn-back:hover {
+        background: rgba(255,255,255,0.3);
+    }
+
+    /* ===== User Analysis View ===== */
+    .user-analysis-view {
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    .user-analysis-header {
+        background: white;
+        border-radius: var(--radius);
+        padding: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: var(--card-shadow);
+    }
+
+    .user-avatar-large {
+        font-size: 5rem;
+        color: var(--primary);
+    }
+
+    .user-header-info h2 {
+        margin: 0 0 0.5rem 0;
+        font-size: 1.75rem;
+        color: var(--dark);
+    }
+
+    .user-id-badge {
+        display: inline-block;
+        background: var(--bg);
+        color: var(--gray);
+        padding: 0.25rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .user-header-stats {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .header-stat {
+        font-size: 0.9rem;
+        color: var(--gray);
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .header-stat i { color: var(--primary); }
+
+    .header-stat.trend-improving { color: var(--success); }
+    .header-stat.trend-declining { color: var(--danger); }
+    .header-stat.trend-stable { color: var(--warning); }
+
+    /* ===== Analysis Stats Grid ===== */
+    .analysis-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .analysis-stat-card {
+        background: white;
+        border-radius: var(--radius-sm);
+        padding: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        box-shadow: var(--card-shadow);
+        animation: slideUp 0.5s ease-out;
+    }
+
+    .analysis-stat-card i {
+        font-size: 1.75rem;
+        color: var(--primary);
+    }
+
+    .analysis-stat-card.highlight {
+        background: linear-gradient(135deg, #fef3c7, #fde68a);
+    }
+
+    .analysis-stat-card.highlight i { color: var(--warning); }
+
+    .analysis-stat-card.positive {
+        background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+    }
+
+    .analysis-stat-card.positive i { color: var(--success); }
+
+    .analysis-stat-card.negative {
+        background: linear-gradient(135deg, #fee2e2, #fecaca);
+    }
+
+    .analysis-stat-card.negative i { color: var(--danger); }
+
+    .stat-data { flex: 1; }
+
+    .stat-number {
+        display: block;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--dark);
+    }
+
+    /* ===== Analysis Grid ===== */
+    .analysis-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+    }
+
+    .analysis-panel {
+        background: white;
+        border-radius: var(--radius);
+        box-shadow: var(--card-shadow);
+        overflow: hidden;
+    }
+
+    /* ===== Game Breakdown ===== */
+    .game-breakdown-list {
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .game-breakdown-item {
+        background: var(--bg);
+        border-radius: var(--radius-sm);
+        padding: 1.25rem;
+        border-left: 4px solid transparent;
+    }
+
+    .game-breakdown-item.memory-match { border-left-color: #7c3aed; }
+    .game-breakdown-item.reaction-trainer { border-left-color: #f59e0b; }
+    .game-breakdown-item.sorting-task { border-left-color: #10b981; }
+    .game-breakdown-item.trail-making { border-left-color: #0284c7; }
+    .game-breakdown-item.dual-task { border-left-color: #be185d; }
+    .game-breakdown-item.stroop-test { border-left-color: #9333ea; }
+
+    .breakdown-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .breakdown-header .game-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        background: white;
+    }
+
+    .game-breakdown-item.memory-match .game-icon { color: #7c3aed; }
+    .game-breakdown-item.reaction-trainer .game-icon { color: #f59e0b; }
+    .game-breakdown-item.sorting-task .game-icon { color: #10b981; }
+    .game-breakdown-item.trail-making .game-icon { color: #0284c7; }
+    .game-breakdown-item.dual-task .game-icon { color: #be185d; }
+    .game-breakdown-item.stroop-test .game-icon { color: #9333ea; }
+
+    .breakdown-header .game-name { flex: 1; }
+    .breakdown-header .game-name h4 { margin: 0; font-size: 1rem; color: var(--dark); }
+    .breakdown-header .game-name span { font-size: 0.8rem; color: var(--gray); }
+
+    .breakdown-stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .breakdown-stat {
+        text-align: center;
+        padding: 0.5rem;
+        background: white;
+        border-radius: 8px;
+    }
+
+    .breakdown-stat .label {
+        display: block;
+        font-size: 0.65rem;
+        color: var(--gray);
+        text-transform: uppercase;
+    }
+
+    .breakdown-stat .value {
+        display: block;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--dark);
+    }
+
+    .breakdown-stat .value.highlight { color: var(--warning); }
+
+    .accuracy-progress {
+        height: 6px;
+        background: rgba(0,0,0,0.1);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .accuracy-progress .progress-fill {
+        height: 100%;
+        border-radius: 3px;
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
+    }
+
+    /* ===== Difficulty Chart ===== */
+    .difficulty-chart {
+        display: flex;
+        justify-content: space-around;
+        align-items: flex-end;
+        height: 200px;
+        padding: 1.5rem;
+    }
+
+    .difficulty-bar-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .difficulty-bar {
+        width: 50px;
+        background: linear-gradient(180deg, var(--success), var(--primary));
+        border-radius: 8px 8px 0 0;
+        height: var(--height);
+        min-height: 30px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 0.5rem;
+        animation: barGrow 0.8s ease-out forwards;
+    }
+
+    .bar-sessions {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: white;
+    }
+
+    .difficulty-label {
+        font-size: 0.75rem;
+        color: var(--gray);
+        font-weight: 500;
+    }
+
+    .difficulty-accuracy {
+        font-size: 0.7rem;
+        color: var(--primary);
+        font-weight: 600;
+    }
+
+    /* ===== Daily Pattern ===== */
+    .daily-pattern-chart {
+        display: flex;
+        justify-content: space-around;
+        align-items: flex-end;
+        height: 180px;
+        padding: 1.5rem;
+    }
+
+    .daily-bar-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .daily-bar {
+        width: 35px;
+        background: linear-gradient(180deg, var(--secondary), var(--primary));
+        border-radius: 6px 6px 0 0;
+        height: var(--height);
+        min-height: 20px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 0.35rem;
+        animation: barGrow 0.8s ease-out forwards;
+    }
+
+    .day-label {
+        font-size: 0.7rem;
+        color: var(--gray);
+        font-weight: 500;
+    }
+
+    /* ===== Cognitive Analysis ===== */
+    .cognitive-analysis {
+        padding: 1.5rem;
+    }
+
+    .strengths-section, .improvement-section {
+        margin-bottom: 1.5rem;
+    }
+
+    .cognitive-analysis h4 {
+        font-size: 0.9rem;
+        margin: 0 0 1rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .strengths-section h4 { color: var(--success); }
+    .improvement-section h4 { color: var(--warning); }
+
+    .insight-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        margin-bottom: 0.5rem;
+    }
+
+    .insight-item.strength {
+        background: #d1fae5;
+    }
+
+    .insight-item.improvement {
+        background: #fef3c7;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .insight-area {
+        font-weight: 600;
+        color: var(--dark);
+    }
+
+    .insight-score {
+        font-weight: 600;
+        color: var(--success);
+    }
+
+    .insight-suggestion {
+        font-size: 0.8rem;
+        color: var(--gray);
+        margin-top: 0.25rem;
+    }
+
+    .no-insights {
+        color: var(--gray);
+        text-align: center;
+        padding: 2rem;
+    }
+
+    /* ===== Recommendations ===== */
+    .recommendations-list {
+        padding: 1.5rem;
+    }
+
+    .recommendation-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 1rem;
+        background: var(--bg);
+        border-radius: 8px;
+        margin-bottom: 0.75rem;
+    }
+
+    .recommendation-item i {
+        color: var(--primary);
+        font-size: 1.25rem;
+        flex-shrink: 0;
+    }
+
+    .recommendation-item span {
+        color: var(--dark);
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+
+    /* ===== AI Insights Panel ===== */
+    .ai-insights-panel {
+        grid-column: 1 / -1;
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.02) 0%, rgba(14, 165, 233, 0.02) 100%);
+        border: 1px solid rgba(124, 58, 237, 0.15);
+    }
+
+    .ai-header {
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(14, 165, 233, 0.08) 100%);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .ai-header h3 {
+        color: #7c3aed;
+    }
+
+    .ai-header h3 i {
+        color: #7c3aed;
+    }
+
+    .ai-badge {
+        background: linear-gradient(135deg, #7c3aed 0%, #0ea5e9 100%);
+        color: white;
+        font-size: 0.7rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 20px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        animation: pulse-glow 2s ease-in-out infinite;
+    }
+
+    @@keyframes pulse-glow {
+        0%, 100% { box-shadow: 0 0 5px rgba(124, 58, 237, 0.3); }
+        50% { box-shadow: 0 0 15px rgba(124, 58, 237, 0.5); }
+    }
+
+    .ai-insights-content {
+        padding: 1.5rem;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+    }
+
+    .ai-insight-section {
+        display: flex;
+        gap: 1rem;
+        padding: 1.25rem;
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        transition: all 0.3s ease;
+    }
+
+    .ai-insight-section:hover {
+        border-color: rgba(124, 58, 237, 0.3);
+        box-shadow: 0 4px 12px rgba(124, 58, 237, 0.1);
+        transform: translateY(-2px);
+    }
+
+    .ai-insight-section.progress-summary {
+        grid-column: 1 / -1;
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(124, 58, 237, 0.05) 100%);
+        border-color: rgba(16, 185, 129, 0.2);
+    }
+
+    .ai-insight-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .ai-insight-icon i {
+        font-size: 1.5rem;
+    }
+
+    .ai-insight-icon.cognitive {
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(124, 58, 237, 0.05) 100%);
+        color: #7c3aed;
+    }
+
+    .ai-insight-icon.focus {
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.05) 100%);
+        color: #f59e0b;
+    }
+
+    .ai-insight-icon.next {
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.15) 0%, rgba(14, 165, 233, 0.05) 100%);
+        color: #0ea5e9;
+    }
+
+    .ai-insight-icon.progress {
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.05) 100%);
+        color: #10b981;
+    }
+
+    .ai-insight-details h4 {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--dark);
+        margin-bottom: 0.5rem;
+    }
+
+    .ai-insight-details p {
+        font-size: 0.85rem;
+        color: var(--gray);
+        line-height: 1.6;
+        margin: 0;
+    }
+
+    /* Additional AI Analysis Styles */
+    .ai-header-meta {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+    }
+
+    .risk-badge {
+        font-size: 0.7rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 20px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .risk-badge.risk-low {
+        background: rgba(16, 185, 129, 0.15);
+        color: #10b981;
+    }
+
+    .risk-badge.risk-moderate {
+        background: rgba(245, 158, 11, 0.15);
+        color: #f59e0b;
+    }
+
+    .risk-badge.risk-high {
+        background: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+    }
+
+    .ai-insight-section.full-width {
+        grid-column: 1 / -1;
+    }
+
+    .ai-insight-section.metrics-section {
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.05) 0%, rgba(124, 58, 237, 0.05) 100%);
+        padding: 1.5rem;
+    }
+
+    .ai-insight-icon.performance {
+        background: linear-gradient(135deg, rgba(236, 72, 153, 0.15) 0%, rgba(236, 72, 153, 0.05) 100%);
+        color: #ec4899;
+    }
+
+    .ai-insight-icon.therapy {
+        background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.05) 100%);
+        color: #22c55e;
+    }
+
+    .ai-metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2rem;
+        width: 100%;
+    }
+
+    .ai-metric {
+        text-align: center;
+    }
+
+    .metric-label {
+        font-size: 0.75rem;
+        color: var(--gray);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.5rem;
+    }
+
+    .metric-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+
+    .metric-value.engagement {
+        color: #7c3aed;
+    }
+
+    .metric-value.motivation-positive {
+        color: #10b981;
+    }
+
+    .metric-value.motivation-declining {
+        color: #ef4444;
+    }
+
+    .metric-value.motivation-stable {
+        color: #f59e0b;
+    }
+
+    .metric-bar {
+        height: 6px;
+        background: #e5e7eb;
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .metric-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #7c3aed 0%, #0ea5e9 100%);
+        border-radius: 3px;
+        transition: width 0.5s ease;
+    }
+
+    .metric-text {
+        font-size: 0.8rem;
+        color: var(--gray);
+        line-height: 1.5;
+    }
+
+    /* ===== Live AI Analysis Styles ===== */
+    .ai-badge.loading {
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        animation: pulse-badge 1.5s ease-in-out infinite;
+    }
+
+    .ai-badge.loading i {
+        margin-right: 0.5rem;
+    }
+
+    .spinning {
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    @@keyframes pulse-badge {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+
+    .ai-loading-content {
+        padding: 3rem;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .ai-loading-animation {
+        position: relative;
+        width: 80px;
+        height: 80px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .ai-loading-animation i {
+        font-size: 2.5rem;
+        color: #7c3aed;
+        animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .pulse-ring {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border: 3px solid #7c3aed;
+        border-radius: 50%;
+        animation: pulse-ring 1.5s ease-out infinite;
+    }
+
+    @@keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+    }
+
+    @@keyframes pulse-ring {
+        0% { transform: scale(0.8); opacity: 1; }
+        100% { transform: scale(1.5); opacity: 0; }
+    }
+
+    .ai-loading-content p {
+        font-size: 1rem;
+        color: var(--dark);
+        font-weight: 500;
+    }
+
+    .ai-loading-hint {
+        font-size: 0.85rem;
+        color: var(--gray);
+    }
+
+    .ai-no-data {
+        padding: 3rem;
+        text-align: center;
+        color: var(--gray);
+    }
+
+    .ai-no-data i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .ai-insight-section.highlight {
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(14, 165, 233, 0.08) 100%);
+        border-color: rgba(124, 58, 237, 0.2);
+    }
+
+    .ai-insight-section.encouraging-note {
+        background: linear-gradient(135deg, rgba(236, 72, 153, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%);
+        border-color: rgba(236, 72, 153, 0.2);
+    }
+
+    .encouraging-text {
+        font-style: italic;
+        color: #7c3aed !important;
+    }
+
+    .ai-insight-icon.memory {
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(124, 58, 237, 0.05) 100%);
+        color: #7c3aed;
+    }
+
+    .ai-insight-icon.reaction {
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.05) 100%);
+        color: #f59e0b;
+    }
+
+    .ai-insight-icon.sorting {
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.05) 100%);
+        color: #10b981;
+    }
+
+    .ai-insight-icon.pattern {
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(124, 58, 237, 0.05) 100%);
+        color: #7c3aed;
+    }
+
+    .ai-insight-icon.concern {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%);
+        color: #ef4444;
+    }
+
+    .ai-insight-icon.encourage {
+        background: linear-gradient(135deg, rgba(236, 72, 153, 0.15) 0%, rgba(236, 72, 153, 0.05) 100%);
+        color: #ec4899;
+    }
+
+    .ai-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .ai-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        padding: 0.5rem 0;
+        font-size: 0.85rem;
+        color: var(--gray);
+        line-height: 1.5;
+    }
+
+    .ai-list li i {
+        flex-shrink: 0;
+        margin-top: 0.15rem;
+    }
+
+    .ai-list.strengths li i {
+        color: #10b981;
+    }
+
+    .ai-list.concerns li i {
+        color: #ef4444;
+    }
+
+    .ai-list.recommendations li i {
+        color: #7c3aed;
+    }
+
+    /* ===== Recent Sessions (Analysis View) ===== */
+    .recent-sessions-list {
+        max-height: 350px;
+        overflow-y: auto;
+    }
+
+    .session-row {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 0.75fr 1.25fr;
+        gap: 1rem;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid #f3f4f6;
+        align-items: center;
+        font-size: 0.9rem;
+    }
+
+    .session-row:hover {
+        background: #f8fafc;
+    }
+
+    .session-game {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 500;
+    }
+
+    .session-game i {
+        font-size: 1.25rem;
+    }
+
+    .session-row.memory-match .session-game i { color: #7c3aed; }
+    .session-row.reaction-trainer .session-game i { color: #f59e0b; }
+    .session-row.sorting-task .session-game i { color: #10b981; }
+    .session-row.trail-making .session-game i { color: #0284c7; }
+    .session-row.dual-task .session-game i { color: #be185d; }
+    .session-row.stroop-test .session-game i { color: #9333ea; }
+
+    .session-score { font-weight: 600; color: var(--dark); }
+    .session-accuracy { color: var(--primary); }
+    .session-level { color: var(--gray); }
+    .session-date { font-size: 0.8rem; color: var(--gray); text-align: right; }
+
+    /* ===== Responsive ===== */
+    @@media (max-width: 1200px) {
+        .dashboard-grid { grid-template-columns: 1fr; }
+        .stats-overview { grid-template-columns: repeat(2, 1fr); }
+        .insights-bar { grid-template-columns: repeat(2, 1fr); }
+        .analysis-stats-grid { grid-template-columns: repeat(3, 1fr); }
+        .analysis-grid { grid-template-columns: 1fr; }
+    }
+
+    @@media (max-width: 768px) {
+        .therapist-container { padding: 1rem; }
+        .hero-section { flex-direction: column; text-align: center; padding: 1.5rem; }
+        .hero-title { font-size: 1.5rem; justify-content: center; }
+        .hero-actions { margin-top: 1rem; display: flex; gap: 0.5rem; }
+        .stats-overview { grid-template-columns: 1fr; }
+        .games-grid { grid-template-columns: 1fr; }
+        .insights-bar { grid-template-columns: 1fr; }
+        .profile-stats { grid-template-columns: 1fr; }
+        .weekly-chart { height: 140px; }
+        .chart-bar { width: 30px; }
+        .analysis-stats-grid { grid-template-columns: repeat(2, 1fr); }
+        .user-analysis-header { flex-direction: column; text-align: center; }
+        .user-header-stats { justify-content: center; }
+        .breakdown-stats { grid-template-columns: repeat(2, 1fr); }
+        .session-row { grid-template-columns: 1fr; gap: 0.5rem; }
+    }
+</style>

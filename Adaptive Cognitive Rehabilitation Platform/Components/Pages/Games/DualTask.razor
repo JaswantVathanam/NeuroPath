@@ -1,0 +1,1574 @@
+@page "/games/dual-task"
+@using Microsoft.AspNetCore.Components.Web
+@using Adaptive_Cognitive_Rehabilitation_Platform.Components
+@using AdaptiveCognitiveRehabilitationPlatform.Services
+@using NeuroPath.Models
+@using AdaptiveCognitiveRehabilitationPlatform.Services.GameAnalytics
+@inject ILogger<DualTask> Logger
+@inject GameStatisticsService StatsService
+@inject GameAiAnalysisService AiService
+@inject IGameSessionRepository SessionRepository
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Dual Task Training - NeuroPath</PageTitle>
+
+<div class="dt-container">
+    @if (!gameStarted)
+    {
+        <!-- Level Selection Screen -->
+        <div class="dt-selection">
+            <div class="dt-header">
+                <h1><i class="bi bi-diagram-2-fill"></i> Dual Task Training</h1>
+                <p>Train divided attention by performing two tasks simultaneously!</p>
+            </div>
+
+            <div class="dt-explanation">
+                <div class="dt-task-preview">
+                    <div class="task-card primary">
+                        <i class="bi bi-hand-index-thumb"></i>
+                        <h4>Primary Task</h4>
+                        <p>Click the colored circles as they appear</p>
+                    </div>
+                    <div class="task-divider">
+                        <i class="bi bi-plus-lg"></i>
+                    </div>
+                    <div class="task-card secondary">
+                        <i class="bi bi-calculator"></i>
+                        <h4>Secondary Task</h4>
+                        <p>Solve simple math problems</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dt-levels">
+                <h3>Select Difficulty</h3>
+                <div class="dt-level-buttons">
+                    <button class="dt-level-btn @(selectedLevel == 1 ? "active" : "")" 
+                            @onclick="() => SelectLevel(1)">
+                        <i class="bi bi-flower2"></i>
+                        <strong>Easy</strong>
+                        <small>Slow pace, simple math</small>
+                    </button>
+                    <button class="dt-level-btn @(selectedLevel == 2 ? "active" : "")" 
+                            @onclick="() => SelectLevel(2)">
+                        <i class="bi bi-tree-fill"></i>
+                        <strong>Medium</strong>
+                        <small>Moderate pace, harder math</small>
+                    </button>
+                    <button class="dt-level-btn @(selectedLevel == 3 ? "active" : "")" 
+                            @onclick="() => SelectLevel(3)">
+                        <i class="bi bi-fire"></i>
+                        <strong>Hard</strong>
+                        <small>Fast pace, complex math</small>
+                    </button>
+                </div>
+            </div>
+
+            <button class="dt-start-btn" 
+                    @onclick="StartGame"
+                    disabled="@(selectedLevel == 0)">
+                <i class="bi bi-play-fill"></i> START GAME
+            </button>
+        </div>
+    }
+    else if (gameStarted && !gameEnded && !aiAnalyzing)
+    {
+        <!-- Game Board -->
+        <div class="dt-game">
+            <div class="dt-info">
+                <div class="dt-stat">
+                    <span class="dt-label">Round</span>
+                    <span class="dt-value">@currentRound / @totalRounds</span>
+                </div>
+                <div class="dt-stat">
+                    <span class="dt-label">Clicks</span>
+                    <span class="dt-value correct">@correctClicks</span>
+                </div>
+                <div class="dt-stat">
+                    <span class="dt-label">Math</span>
+                    <span class="dt-value correct">@correctMath</span>
+                </div>
+                <div class="dt-stat">
+                    <span class="dt-label">Time</span>
+                    <span class="dt-value">@elapsedSeconds<small>s</small></span>
+                </div>
+            </div>
+
+            <div class="dt-split-screen">
+                <!-- Primary Task: Click targets -->
+                <div class="dt-primary-area">
+                    <div class="task-title">
+                        <i class="bi bi-hand-index-thumb"></i> Click the Circles!
+                    </div>
+                    <div class="dt-target-zone" @ref="targetZoneRef">
+                        @foreach (var target in activeTargets)
+                        {
+                            <button class="dt-target @target.Color @(target.IsClicked ? "clicked" : "") @(target.IsMissed ? "missed" : "")"
+                                    style="left: @(target.X)px; top: @(target.Y)px; width: @(target.Size)px; height: @(target.Size)px;"
+                                    @onclick="() => HandleTargetClick(target)"
+                                    disabled="@(target.IsClicked || target.IsMissed)">
+                            </button>
+                        }
+                        @if (!activeTargets.Any())
+                        {
+                            <div class="waiting-indicator">
+                                <i class="bi bi-hourglass-split"></i>
+                                <span>Get ready...</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Secondary Task: Math problems -->
+                <div class="dt-secondary-area">
+                    <div class="task-title">
+                        <i class="bi bi-calculator"></i> Solve the Math!
+                    </div>
+                    <div class="dt-math-zone">
+                        @if (currentMathProblem != null)
+                        {
+                            <div class="math-problem @(mathFeedback)">
+                                <span class="problem-text">@currentMathProblem.Question</span>
+                                <div class="math-answers">
+                                    @foreach (var answer in currentMathProblem.Options)
+                                    {
+                                        <button class="math-answer-btn @(selectedAnswer == answer ? (answer == currentMathProblem.CorrectAnswer ? "correct" : "wrong") : "")"
+                                                @onclick="() => SelectMathAnswer(answer)"
+                                                disabled="@(selectedAnswer != null)">
+                                            @answer
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                            <div class="math-timer">
+                                <div class="timer-bar" style="width: @mathTimerPercent%"></div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="waiting-indicator">
+                                <i class="bi bi-calculator"></i>
+                                <span>Next problem coming...</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="dt-progress-bar">
+                <div class="progress-fill" style="width: @((currentRound * 100.0 / totalRounds))%"></div>
+            </div>
+        </div>
+    }
+    else if (aiAnalyzing)
+    {
+        <!-- AI Analysis Loading -->
+        <div class="dt-analyzing">
+            <div class="dt-spinner"></div>
+            <h3>AI is analyzing your performance...</h3>
+            <p>Evaluating your divided attention skills</p>
+        </div>
+    }
+    else if (gameEnded)
+    {
+        <!-- Results Screen -->
+        <div class="dt-results">
+            <div class="dt-results-header">
+                <div class="dt-trophy">
+                    @if (overallScore >= 80)
+                    {
+                        <i class="bi bi-trophy-fill gold"></i>
+                    }
+                    else if (overallScore >= 60)
+                    {
+                        <i class="bi bi-trophy-fill silver"></i>
+                    }
+                    else
+                    {
+                        <i class="bi bi-trophy-fill bronze"></i>
+                    }
+                </div>
+                <h2>Training Complete!</h2>
+                <p class="dt-score-label">Overall Score</p>
+                <div class="dt-big-score">@overallScore.ToString("0")</div>
+            </div>
+
+            <div class="dt-dual-stats">
+                <div class="dt-task-result primary">
+                    <h4><i class="bi bi-hand-index-thumb"></i> Click Task</h4>
+                    <div class="result-stats">
+                        <div class="result-item">
+                            <span class="result-value">@correctClicks</span>
+                            <span class="result-label">Clicked</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-value">@missedClicks</span>
+                            <span class="result-label">Missed</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-value">@clickAccuracy.ToString("0")%</span>
+                            <span class="result-label">Accuracy</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="dt-task-result secondary">
+                    <h4><i class="bi bi-calculator"></i> Math Task</h4>
+                    <div class="result-stats">
+                        <div class="result-item">
+                            <span class="result-value">@correctMath</span>
+                            <span class="result-label">Correct</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-value">@wrongMath</span>
+                            <span class="result-label">Wrong</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-value">@mathAccuracy.ToString("0")%</span>
+                            <span class="result-label">Accuracy</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dt-stats-grid">
+                <div class="dt-stat-card">
+                    <i class="bi bi-clock"></i>
+                    <span class="value">@elapsedSeconds s</span>
+                    <span class="label">Total Time</span>
+                </div>
+                <div class="dt-stat-card">
+                    <i class="bi bi-lightning"></i>
+                    <span class="value">@avgReactionTime.ToString("0") ms</span>
+                    <span class="label">Avg Reaction</span>
+                </div>
+                <div class="dt-stat-card">
+                    <i class="bi bi-graph-up"></i>
+                    <span class="value">@combinedAccuracy.ToString("0")%</span>
+                    <span class="label">Combined Accuracy</span>
+                </div>
+                <div class="dt-stat-card">
+                    <i class="bi bi-trophy"></i>
+                    <span class="value">@GetPerformanceLevel()</span>
+                    <span class="label">Performance</span>
+                </div>
+            </div>
+
+            @if (_aiResponse != null)
+            {
+                <div class="dt-ai-feedback">
+                    <div class="ai-header">
+                        <i class="bi bi-robot"></i>
+                        <span>AI Feedback</span>
+                    </div>
+                    <div class="ai-message encouragement">
+                        <i class="bi bi-emoji-smile"></i>
+                        <p>@_aiResponse.Encouragement</p>
+                    </div>
+                    @if (!string.IsNullOrEmpty(_aiResponse.FunMessage))
+                    {
+                        <div class="ai-message fun">
+                            <i class="bi bi-stars"></i>
+                            <p>@_aiResponse.FunMessage</p>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(_aiResponse.EffortNote))
+                    {
+                        <div class="ai-message tip">
+                            <i class="bi bi-lightbulb"></i>
+                            <p>@_aiResponse.EffortNote</p>
+                        </div>
+                    }
+                </div>
+            }
+
+            <div class="dt-actions">
+                <button class="dt-btn-primary" @onclick="StartGame">
+                    <i class="bi bi-arrow-clockwise"></i> Play Again
+                </button>
+                <button class="dt-btn-secondary" @onclick="GoToGames">
+                    <i class="bi bi-grid-3x3-gap"></i> All Games
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .dt-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+    }
+
+    /* Selection Screen */
+    .dt-selection {
+        background: white;
+        border-radius: 24px;
+        padding: 3rem;
+        max-width: 800px;
+        width: 100%;
+        text-align: center;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+
+    .dt-header h1 {
+        font-size: 2.5rem;
+        background: linear-gradient(135deg, #06b6d4, #0891b2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 0.5rem;
+    }
+
+    .dt-header p {
+        color: #6b7280;
+        font-size: 1.1rem;
+    }
+
+    .dt-explanation {
+        margin: 2rem 0;
+    }
+
+    .dt-task-preview {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .task-card {
+        background: #f9fafb;
+        border-radius: 16px;
+        padding: 1.5rem;
+        width: 200px;
+        border: 2px solid #e5e7eb;
+    }
+
+    .task-card.primary {
+        border-color: #06b6d4;
+        background: linear-gradient(135deg, #ecfeff, #cffafe);
+    }
+
+    .task-card.secondary {
+        border-color: #8b5cf6;
+        background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+    }
+
+    .task-card i {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .task-card.primary i { color: #06b6d4; }
+    .task-card.secondary i { color: #8b5cf6; }
+
+    .task-card h4 {
+        margin: 0.5rem 0;
+        font-size: 1.1rem;
+    }
+
+    .task-card p {
+        font-size: 0.85rem;
+        color: #6b7280;
+        margin: 0;
+    }
+
+    .task-divider {
+        font-size: 2rem;
+        color: #9ca3af;
+    }
+
+    .dt-levels {
+        margin: 2rem 0;
+    }
+
+    .dt-levels h3 {
+        font-size: 1.1rem;
+        color: #374151;
+        margin-bottom: 1rem;
+    }
+
+    .dt-level-buttons {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .dt-level-btn {
+        background: #f9fafb;
+        border: 2px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 1.5rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 160px;
+    }
+
+    .dt-level-btn:hover {
+        border-color: #06b6d4;
+        transform: translateY(-2px);
+    }
+
+    .dt-level-btn.active {
+        background: linear-gradient(135deg, #06b6d4, #0891b2);
+        border-color: transparent;
+        color: white;
+    }
+
+    .dt-level-btn i {
+        font-size: 2rem;
+    }
+
+    .dt-level-btn small {
+        font-size: 0.8rem;
+        opacity: 0.8;
+    }
+
+    .dt-start-btn {
+        background: linear-gradient(135deg, #06b6d4, #0891b2);
+        color: white;
+        border: none;
+        padding: 1rem 3rem;
+        font-size: 1.2rem;
+        font-weight: 600;
+        border-radius: 50px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-top: 1rem;
+    }
+
+    .dt-start-btn:hover:not(:disabled) {
+        transform: scale(1.05);
+        box-shadow: 0 10px 30px rgba(6, 182, 212, 0.4);
+    }
+
+    .dt-start-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* Game Board */
+    .dt-game {
+        background: white;
+        border-radius: 24px;
+        padding: 1.5rem;
+        max-width: 900px;
+        width: 100%;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+
+    .dt-info {
+        display: flex;
+        justify-content: space-around;
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid #f3f4f6;
+    }
+
+    .dt-stat {
+        text-align: center;
+    }
+
+    .dt-label {
+        display: block;
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin-bottom: 0.25rem;
+    }
+
+    .dt-value {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .dt-value.correct {
+        color: #10b981;
+    }
+
+    .dt-split-screen {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        min-height: 400px;
+    }
+
+    .dt-primary-area, .dt-secondary-area {
+        border-radius: 16px;
+        overflow: hidden;
+    }
+
+    .dt-primary-area {
+        background: linear-gradient(135deg, #ecfeff, #cffafe);
+        border: 2px solid #06b6d4;
+    }
+
+    .dt-secondary-area {
+        background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+        border: 2px solid #8b5cf6;
+    }
+
+    .task-title {
+        padding: 0.75rem;
+        text-align: center;
+        font-weight: 600;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .dt-primary-area .task-title {
+        background: rgba(6, 182, 212, 0.2);
+        color: #0891b2;
+    }
+
+    .dt-secondary-area .task-title {
+        background: rgba(139, 92, 246, 0.2);
+        color: #7c3aed;
+    }
+
+    .dt-target-zone {
+        position: relative;
+        height: 320px;
+        margin: 0.5rem;
+    }
+
+    .dt-target {
+        position: absolute;
+        border-radius: 50%;
+        border: none;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .dt-target.red { background: linear-gradient(135deg, #ef4444, #dc2626); }
+    .dt-target.blue { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+    .dt-target.green { background: linear-gradient(135deg, #10b981, #059669); }
+    .dt-target.yellow { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    .dt-target.purple { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+
+    .dt-target:hover:not(:disabled) {
+        transform: scale(1.1);
+    }
+
+    .dt-target.clicked {
+        animation: pop 0.3s ease;
+        opacity: 0;
+    }
+
+    .dt-target.missed {
+        animation: fade-out 0.5s ease;
+        opacity: 0.3;
+    }
+
+    @@keyframes pop {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.3); }
+        100% { transform: scale(0); opacity: 0; }
+    }
+
+    @@keyframes fade-out {
+        to { opacity: 0; }
+    }
+
+    .waiting-indicator {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        color: #9ca3af;
+    }
+
+    .waiting-indicator i {
+        font-size: 2rem;
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+
+    .dt-math-zone {
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 320px;
+    }
+
+    .math-problem {
+        text-align: center;
+        padding: 1.5rem;
+        background: white;
+        border-radius: 16px;
+        width: 100%;
+        max-width: 280px;
+        transition: all 0.3s ease;
+    }
+
+    .math-problem.correct {
+        background: #ecfdf5;
+        border: 2px solid #10b981;
+    }
+
+    .math-problem.wrong {
+        background: #fef2f2;
+        border: 2px solid #ef4444;
+    }
+
+    .problem-text {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #1f2937;
+        display: block;
+        margin-bottom: 1rem;
+    }
+
+    .math-answers {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+
+    .math-answer-btn {
+        padding: 0.75rem;
+        font-size: 1.2rem;
+        font-weight: 600;
+        border: 2px solid #e5e7eb;
+        background: white;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .math-answer-btn:hover:not(:disabled) {
+        border-color: #8b5cf6;
+        background: #f5f3ff;
+    }
+
+    .math-answer-btn.correct {
+        background: #10b981;
+        border-color: #10b981;
+        color: white;
+    }
+
+    .math-answer-btn.wrong {
+        background: #ef4444;
+        border-color: #ef4444;
+        color: white;
+    }
+
+    .math-timer {
+        width: 100%;
+        max-width: 280px;
+        height: 6px;
+        background: #e5e7eb;
+        border-radius: 3px;
+        margin-top: 1rem;
+        overflow: hidden;
+    }
+
+    .timer-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #8b5cf6, #7c3aed);
+        border-radius: 3px;
+        transition: width 0.1s linear;
+    }
+
+    .dt-progress-bar {
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 4px;
+        margin-top: 1rem;
+        overflow: hidden;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #06b6d4, #0891b2);
+        border-radius: 4px;
+        transition: width 0.3s ease;
+    }
+
+    /* Analyzing */
+    .dt-analyzing {
+        background: white;
+        border-radius: 24px;
+        padding: 4rem;
+        text-align: center;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+
+    .dt-spinner {
+        width: 60px;
+        height: 60px;
+        border: 4px solid #e5e7eb;
+        border-top-color: #06b6d4;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1.5rem;
+    }
+
+    @@keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    /* Results */
+    .dt-results {
+        background: white;
+        border-radius: 24px;
+        padding: 3rem;
+        max-width: 700px;
+        width: 100%;
+        text-align: center;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+
+    .dt-results-header {
+        margin-bottom: 2rem;
+    }
+
+    .dt-trophy i {
+        font-size: 4rem;
+    }
+
+    .dt-trophy i.gold { color: #fbbf24; }
+    .dt-trophy i.silver { color: #9ca3af; }
+    .dt-trophy i.bronze { color: #d97706; }
+
+    .dt-results-header h2 {
+        font-size: 2rem;
+        color: #1f2937;
+        margin: 1rem 0 0.5rem;
+    }
+
+    .dt-score-label {
+        color: #6b7280;
+    }
+
+    .dt-big-score {
+        font-size: 4rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #06b6d4, #0891b2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .dt-dual-stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .dt-task-result {
+        padding: 1.5rem;
+        border-radius: 16px;
+    }
+
+    .dt-task-result.primary {
+        background: linear-gradient(135deg, #ecfeff, #cffafe);
+        border: 2px solid #06b6d4;
+    }
+
+    .dt-task-result.secondary {
+        background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+        border: 2px solid #8b5cf6;
+    }
+
+    .dt-task-result h4 {
+        margin: 0 0 1rem;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .dt-task-result.primary h4 { color: #0891b2; }
+    .dt-task-result.secondary h4 { color: #7c3aed; }
+
+    .result-stats {
+        display: flex;
+        justify-content: space-around;
+    }
+
+    .result-item {
+        text-align: center;
+    }
+
+    .result-value {
+        display: block;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .result-label {
+        font-size: 0.75rem;
+        color: #6b7280;
+    }
+
+    .dt-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .dt-stat-card {
+        background: #f9fafb;
+        border-radius: 12px;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .dt-stat-card i {
+        font-size: 1.5rem;
+        color: #06b6d4;
+    }
+
+    .dt-stat-card .value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .dt-stat-card .label {
+        font-size: 0.7rem;
+        color: #6b7280;
+    }
+
+    /* AI Feedback */
+    .dt-ai-feedback {
+        background: #f9fafb;
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        text-align: left;
+    }
+
+    .ai-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+        color: #06b6d4;
+        margin-bottom: 1rem;
+    }
+
+    .ai-message {
+        display: flex;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        border-radius: 8px;
+        margin-bottom: 0.5rem;
+    }
+
+    .ai-message.encouragement {
+        background: #ecfdf5;
+        color: #065f46;
+    }
+
+    .ai-message.fun {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .ai-message.tip {
+        background: #eff6ff;
+        color: #1e40af;
+    }
+
+    .ai-message p {
+        margin: 0;
+        flex: 1;
+    }
+
+    .dt-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+    }
+
+    .dt-btn-primary {
+        background: linear-gradient(135deg, #06b6d4, #0891b2);
+        color: white;
+        border: none;
+        padding: 1rem 2rem;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .dt-btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 30px rgba(6, 182, 212, 0.3);
+    }
+
+    .dt-btn-secondary {
+        background: white;
+        color: #06b6d4;
+        border: 2px solid #06b6d4;
+        padding: 1rem 2rem;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .dt-btn-secondary:hover {
+        background: #ecfeff;
+    }
+
+    @@media (max-width: 768px) {
+        .dt-split-screen {
+            grid-template-columns: 1fr;
+        }
+        
+        .dt-stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        
+        .dt-dual-stats {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+@code {
+    private class ClickTarget
+    {
+        public int Id { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public int Size { get; set; }
+        public string Color { get; set; } = "blue";
+        public bool IsClicked { get; set; }
+        public bool IsMissed { get; set; }
+        public DateTime SpawnTime { get; set; }
+    }
+
+    private class MathProblem
+    {
+        public string Question { get; set; } = "";
+        public int CorrectAnswer { get; set; }
+        public List<int> Options { get; set; } = new();
+    }
+
+    private ElementReference targetZoneRef;
+    private int selectedLevel = 0;
+    private bool gameStarted = false;
+    private bool gameEnded = false;
+    private bool aiAnalyzing = false;
+    
+    private int currentRound = 0;
+    private int totalRounds = 10;
+    private int elapsedSeconds = 0;
+    private DateTime gameStartTime;
+    
+    // Click task stats
+    private int correctClicks = 0;
+    private int missedClicks = 0;
+    private double clickAccuracy = 100;
+    private List<double> reactionTimes = new();
+    private double avgReactionTime = 0;
+    
+    // Math task stats
+    private int correctMath = 0;
+    private int wrongMath = 0;
+    private double mathAccuracy = 100;
+    
+    private double combinedAccuracy = 100;
+    private double overallScore = 0;
+    
+    private List<ClickTarget> activeTargets = new();
+    private MathProblem? currentMathProblem = null;
+    private int? selectedAnswer = null;
+    private string mathFeedback = "";
+    private double mathTimerPercent = 100;
+    
+    private System.Threading.Timer? gameTimer;
+    private System.Threading.Timer? targetTimer;
+    private System.Threading.Timer? mathTimer;
+    private System.Threading.Timer? mathCountdownTimer;
+    
+    private int targetIdCounter = 0;
+    private Random random = new Random();
+    private string[] targetColors = { "red", "blue", "green", "yellow", "purple" };
+
+    private GameSessionResult? _gameSessionResult;
+    private GameAiAnalysisService.AiAnalysisResponse? _aiResponse;
+
+    // User context
+    private int currentUserId = 0;
+    private string currentUsername = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadUserContext();
+        }
+    }
+
+    private async Task LoadUserContext()
+    {
+        try
+        {
+            var userIdStr = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "userId");
+            var username = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "username");
+            
+            if (!string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out var id))
+            {
+                currentUserId = id;
+            }
+            currentUsername = username ?? "Player";
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning($"Could not load user context: {ex.Message}");
+            currentUserId = 1;
+            currentUsername = "Player";
+        }
+    }
+
+    private void SelectLevel(int level)
+    {
+        selectedLevel = level;
+        StateHasChanged();
+    }
+
+    private void StartGame()
+    {
+        gameStarted = true;
+        gameEnded = false;
+        aiAnalyzing = false;
+        currentRound = 0;
+        elapsedSeconds = 0;
+        correctClicks = 0;
+        missedClicks = 0;
+        correctMath = 0;
+        wrongMath = 0;
+        reactionTimes.Clear();
+        activeTargets.Clear();
+        currentMathProblem = null;
+        selectedAnswer = null;
+        mathFeedback = "";
+        mathTimerPercent = 100;
+
+        totalRounds = selectedLevel switch
+        {
+            1 => 8,
+            2 => 12,
+            3 => 16,
+            _ => 10
+        };
+
+        gameStartTime = DateTime.Now;
+
+        // Start main game timer
+        gameTimer = new System.Threading.Timer(_ =>
+        {
+            elapsedSeconds++;
+            InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+
+        // Start spawning targets
+        int targetInterval = selectedLevel switch
+        {
+            1 => 2500,
+            2 => 1800,
+            3 => 1200,
+            _ => 2000
+        };
+        targetTimer = new System.Threading.Timer(_ => SpawnTarget(), null, 500, targetInterval);
+
+        // Start math problems
+        int mathInterval = selectedLevel switch
+        {
+            1 => 6000,
+            2 => 4500,
+            3 => 3500,
+            _ => 5000
+        };
+        mathTimer = new System.Threading.Timer(_ => GenerateMathProblem(), null, 1000, mathInterval);
+
+        StateHasChanged();
+    }
+
+    private void SpawnTarget()
+    {
+        if (gameEnded) return;
+
+        InvokeAsync(() =>
+        {
+            // Remove missed targets
+            foreach (var target in activeTargets.Where(t => !t.IsClicked && !t.IsMissed).ToList())
+            {
+                if ((DateTime.Now - target.SpawnTime).TotalMilliseconds > GetTargetLifetime())
+                {
+                    target.IsMissed = true;
+                    missedClicks++;
+                }
+            }
+
+            // Remove old targets
+            activeTargets.RemoveAll(t => t.IsClicked || t.IsMissed);
+
+            // Add new target
+            int size = selectedLevel switch
+            {
+                1 => 60,
+                2 => 50,
+                3 => 40,
+                _ => 50
+            };
+
+            var newTarget = new ClickTarget
+            {
+                Id = targetIdCounter++,
+                X = random.Next(10, 280 - size),
+                Y = random.Next(10, 280 - size),
+                Size = size,
+                Color = targetColors[random.Next(targetColors.Length)],
+                SpawnTime = DateTime.Now
+            };
+
+            activeTargets.Add(newTarget);
+            currentRound++;
+
+            if (currentRound >= totalRounds)
+            {
+                EndGame();
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    private int GetTargetLifetime()
+    {
+        return selectedLevel switch
+        {
+            1 => 3000,
+            2 => 2000,
+            3 => 1500,
+            _ => 2500
+        };
+    }
+
+    private void HandleTargetClick(ClickTarget target)
+    {
+        if (target.IsClicked || target.IsMissed) return;
+
+        target.IsClicked = true;
+        correctClicks++;
+        
+        var reactionTime = (DateTime.Now - target.SpawnTime).TotalMilliseconds;
+        reactionTimes.Add(reactionTime);
+
+        StateHasChanged();
+    }
+
+    private void GenerateMathProblem()
+    {
+        if (gameEnded) return;
+
+        InvokeAsync(() =>
+        {
+            selectedAnswer = null;
+            mathFeedback = "";
+            mathTimerPercent = 100;
+
+            int a, b, correctAnswer;
+            string op;
+
+            switch (selectedLevel)
+            {
+                case 1: // Easy: simple addition/subtraction
+                    a = random.Next(1, 10);
+                    b = random.Next(1, 10);
+                    if (random.Next(2) == 0)
+                    {
+                        op = "+";
+                        correctAnswer = a + b;
+                    }
+                    else
+                    {
+                        op = "-";
+                        if (b > a) (a, b) = (b, a);
+                        correctAnswer = a - b;
+                    }
+                    break;
+
+                case 2: // Medium: larger numbers, includes multiplication
+                    a = random.Next(5, 20);
+                    b = random.Next(2, 12);
+                    int opChoice = random.Next(3);
+                    if (opChoice == 0)
+                    {
+                        op = "+";
+                        correctAnswer = a + b;
+                    }
+                    else if (opChoice == 1)
+                    {
+                        op = "-";
+                        if (b > a) (a, b) = (b, a);
+                        correctAnswer = a - b;
+                    }
+                    else
+                    {
+                        a = random.Next(2, 10);
+                        b = random.Next(2, 10);
+                        op = "×";
+                        correctAnswer = a * b;
+                    }
+                    break;
+
+                default: // Hard: all operations including division
+                    int opType = random.Next(4);
+                    if (opType == 0)
+                    {
+                        a = random.Next(10, 50);
+                        b = random.Next(10, 50);
+                        op = "+";
+                        correctAnswer = a + b;
+                    }
+                    else if (opType == 1)
+                    {
+                        a = random.Next(20, 60);
+                        b = random.Next(10, 40);
+                        if (b > a) (a, b) = (b, a);
+                        op = "-";
+                        correctAnswer = a - b;
+                    }
+                    else if (opType == 2)
+                    {
+                        a = random.Next(3, 12);
+                        b = random.Next(3, 12);
+                        op = "×";
+                        correctAnswer = a * b;
+                    }
+                    else
+                    {
+                        b = random.Next(2, 10);
+                        correctAnswer = random.Next(2, 12);
+                        a = b * correctAnswer;
+                        op = "÷";
+                    }
+                    break;
+            }
+
+            // Generate wrong answers
+            var options = new HashSet<int> { correctAnswer };
+            while (options.Count < 4)
+            {
+                int wrong = correctAnswer + random.Next(-10, 11);
+                if (wrong != correctAnswer && wrong >= 0)
+                {
+                    options.Add(wrong);
+                }
+            }
+
+            currentMathProblem = new MathProblem
+            {
+                Question = $"{a} {op} {b} = ?",
+                CorrectAnswer = correctAnswer,
+                Options = options.OrderBy(_ => random.Next()).ToList()
+            };
+
+            // Start countdown timer
+            int mathTime = selectedLevel switch
+            {
+                1 => 6000,
+                2 => 4500,
+                3 => 3500,
+                _ => 5000
+            };
+
+            int elapsed = 0;
+            mathCountdownTimer?.Dispose();
+            mathCountdownTimer = new System.Threading.Timer(_ =>
+            {
+                elapsed += 100;
+                mathTimerPercent = Math.Max(0, 100 - (elapsed * 100.0 / mathTime));
+                
+                if (elapsed >= mathTime && selectedAnswer == null)
+                {
+                    wrongMath++;
+                    mathFeedback = "wrong";
+                    mathCountdownTimer?.Dispose();
+                }
+                
+                InvokeAsync(StateHasChanged);
+            }, null, 0, 100);
+
+            StateHasChanged();
+        });
+    }
+
+    private void SelectMathAnswer(int answer)
+    {
+        if (selectedAnswer != null) return;
+
+        selectedAnswer = answer;
+        mathCountdownTimer?.Dispose();
+
+        if (answer == currentMathProblem?.CorrectAnswer)
+        {
+            correctMath++;
+            mathFeedback = "correct";
+        }
+        else
+        {
+            wrongMath++;
+            mathFeedback = "wrong";
+        }
+
+        StateHasChanged();
+    }
+
+    private async void EndGame()
+    {
+        gameEnded = true;
+        gameTimer?.Dispose();
+        targetTimer?.Dispose();
+        mathTimer?.Dispose();
+        mathCountdownTimer?.Dispose();
+
+        // Calculate final stats
+        int totalClicks = correctClicks + missedClicks;
+        clickAccuracy = totalClicks > 0 ? (correctClicks * 100.0 / totalClicks) : 100;
+
+        int totalMath = correctMath + wrongMath;
+        mathAccuracy = totalMath > 0 ? (correctMath * 100.0 / totalMath) : 100;
+
+        combinedAccuracy = (clickAccuracy + mathAccuracy) / 2;
+        avgReactionTime = reactionTimes.Any() ? reactionTimes.Average() : 0;
+
+        // Calculate overall score
+        double reactionBonus = Math.Max(0, 20 - (avgReactionTime / 100));
+        overallScore = Math.Min(100, (combinedAccuracy * 0.7) + (reactionBonus * 0.3));
+
+        _gameSessionResult = StatsService.CalculateStatistics(
+            "Dual Task",
+            selectedLevel,
+            totalClicks + totalMath,
+            correctClicks + correctMath,
+            totalRounds + totalMath,
+            missedClicks + wrongMath,
+            elapsedSeconds,
+            gameStartTime,
+            DateTime.Now
+        );
+
+        _gameSessionResult.OverallScore = overallScore;
+
+        Logger?.LogInformation($"Dual Task completed. Score: {overallScore:F1}");
+
+        await InvokeAsync(async () =>
+        {
+            await SaveGameSessionAsync();
+            await AnalyzeGameWithAI();
+            StateHasChanged();
+        });
+    }
+
+    private string GetPerformanceLevel()
+    {
+        if (overallScore >= 90) return "Excellent";
+        if (overallScore >= 75) return "Great";
+        if (overallScore >= 60) return "Good";
+        if (overallScore >= 40) return "Fair";
+        return "Keep Trying";
+    }
+
+    private async Task SaveGameSessionAsync()
+    {
+        try
+        {
+            var session = new GameSession
+            {
+                UserId = currentUserId,
+                ProfileId = currentUserId,
+                GameType = "DualTask",
+                Difficulty = selectedLevel,
+                Status = "Completed",
+                TimeStarted = gameStartTime,
+                TimeCompleted = DateTime.UtcNow,
+                TotalSeconds = elapsedSeconds,
+                TotalMoves = correctClicks + missedClicks + correctMath + wrongMath,
+                CorrectMatches = correctClicks + correctMath,
+                Accuracy = (decimal)combinedAccuracy,
+                PerformanceScore = (int)overallScore,
+                EfficiencyScore = (decimal)combinedAccuracy,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                Notes = $"Dual Task - Level {selectedLevel} - Clicks: {correctClicks}/{correctClicks + missedClicks}, Math: {correctMath}/{correctMath + wrongMath}"
+            };
+
+            await SessionRepository.CreateSessionAsync(session);
+
+            // Save via API
+            try
+            {
+                var request = new
+                {
+                    UserId = currentUserId,
+                    Username = currentUsername,
+                    GameType = "DualTask",
+                    GameMode = "Combined",
+                    DifficultyLevel = selectedLevel,
+                    Score = (int)overallScore,
+                    Accuracy = combinedAccuracy,
+                    TotalMoves = correctClicks + missedClicks + correctMath + wrongMath,
+                    CorrectMoves = correctClicks + correctMath,
+                    ErrorCount = missedClicks + wrongMath,
+                    Duration = elapsedSeconds,
+                    CompletedSuccessfully = true,
+                    StartTime = gameStartTime,
+                    EndTime = DateTime.UtcNow
+                };
+
+                var apiUrl = $"{NavigationManager.BaseUri}api/game/save-session";
+                await Http.PostAsJsonAsync(apiUrl, request);
+                Logger?.LogInformation($"Dual Task session saved via API for user {currentUserId}");
+            }
+            catch (Exception apiEx)
+            {
+                Logger?.LogWarning($"Failed to save via API: {apiEx.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"Failed to save game session: {ex.Message}");
+        }
+    }
+
+    private async Task AnalyzeGameWithAI()
+    {
+        aiAnalyzing = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _aiResponse = await AiService.AnalyzeGamePerformanceAsync(
+                _gameSessionResult ?? new GameSessionResult(),
+                currentUsername,
+                0
+            );
+
+            Logger?.LogInformation($"AI Analysis complete for Dual Task");
+            await AutosaveGameResultAsync(_aiResponse);
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"AI Analysis failed: {ex.Message}");
+            
+            // Generate contextual fallback
+            string encouragement = overallScore >= 70 
+                ? "Amazing multitasking skills! You handled both tasks brilliantly!" 
+                : "Great effort at juggling two tasks at once! That's not easy!";
+            
+            string funMessage = clickAccuracy > mathAccuracy
+                ? "Your reflexes are lightning fast! Keep working on the math side too."
+                : "Your math brain is strong! Try to catch those circles quicker next time.";
+
+            _aiResponse = new GameAiAnalysisService.AiAnalysisResponse
+            {
+                Encouragement = encouragement,
+                FunMessage = funMessage,
+                EffortNote = $"Dual-tasking is one of the hardest cognitive skills. You completed {correctClicks + correctMath} successful actions!",
+                PerformanceScore = overallScore,
+                NextDifficultyLevel = Math.Min(3, selectedLevel + 1),
+                Confidence = 0.7
+            };
+
+            await AutosaveGameResultAsync(_aiResponse);
+        }
+
+        aiAnalyzing = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task AutosaveGameResultAsync(GameAiAnalysisService.AiAnalysisResponse? aiResponse)
+    {
+        try
+        {
+            var autosaveRequest = new
+            {
+                UserId = currentUserId,
+                Username = currentUsername,
+                GameType = "DualTask",
+                GameMode = "Combined",
+                DifficultyLevel = selectedLevel,
+                Score = (int)overallScore,
+                Accuracy = combinedAccuracy,
+                Duration = elapsedSeconds,
+                TotalMoves = correctClicks + missedClicks + correctMath + wrongMath,
+                CorrectMoves = correctClicks + correctMath,
+                ErrorCount = missedClicks + wrongMath,
+                ClickAccuracy = clickAccuracy,
+                MathAccuracy = mathAccuracy,
+                AvgReactionTime = avgReactionTime,
+                Encouragement = aiResponse?.Encouragement ?? "",
+                FunMessage = aiResponse?.FunMessage ?? "",
+                EffortNote = aiResponse?.EffortNote ?? "",
+                AiPerformanceScore = aiResponse?.PerformanceScore ?? 0,
+                AiNextDifficultyLevel = aiResponse?.NextDifficultyLevel ?? selectedLevel,
+                AiConfidence = aiResponse?.Confidence ?? 0,
+                Timestamp = DateTime.UtcNow
+            };
+
+            var autosaveUrl = $"{NavigationManager.BaseUri}api/json-stats/save";
+            await Http.PostAsJsonAsync(autosaveUrl, autosaveRequest);
+            Logger?.LogInformation("Dual Task result autosaved with AI feedback");
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogWarning($"Failed to autosave result: {ex.Message}");
+        }
+    }
+
+    private void GoToGames()
+    {
+        NavigationManager.NavigateTo("/games");
+    }
+
+    public void Dispose()
+    {
+        gameTimer?.Dispose();
+        targetTimer?.Dispose();
+        mathTimer?.Dispose();
+        mathCountdownTimer?.Dispose();
+    }
+}

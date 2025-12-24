@@ -1,0 +1,1099 @@
+@page "/activities/breathing-exercise"
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject ActivityAIAnalysisService AIService
+
+<PageTitle>Breathing Exercise - NeuroPath</PageTitle>
+
+<div class="activity-container">
+    <div class="activity-header">
+        <button class="back-btn" @onclick="GoBack">
+            <i class="bi bi-arrow-left"></i>
+        </button>
+        <div class="header-info">
+            <h1><i class="bi bi-wind"></i> Breathing Exercise</h1>
+            <p>Guided breathing for relaxation and mental clarity</p>
+        </div>
+        <div class="session-info">
+            <span class="session-time">
+                <i class="bi bi-clock"></i>
+                @FormatTime(elapsedSeconds)
+            </span>
+        </div>
+    </div>
+
+    <div class="breathing-content">
+        @if (!sessionStarted)
+        {
+            <div class="start-screen">
+                <div class="breathing-icon">
+                    <i class="bi bi-wind"></i>
+                </div>
+                <h2>Breathing Exercise</h2>
+                <p>Choose a breathing technique to begin your relaxation session</p>
+
+                <div class="technique-grid">
+                    @foreach (var technique in breathingTechniques)
+                    {
+                        <div class="technique-card @(selectedTechnique?.Name == technique.Name ? "selected" : "")"
+                             @onclick="() => SelectTechnique(technique)">
+                            <i class="bi @technique.Icon"></i>
+                            <h3>@technique.Name</h3>
+                            <p>@technique.Description</p>
+                            <div class="technique-pattern">
+                                @technique.InhaleSeconds s inhale • @technique.HoldSeconds s hold • @technique.ExhaleSeconds s exhale
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <button class="start-btn" @onclick="StartSession" disabled="@(selectedTechnique == null)">
+                    <i class="bi bi-play-fill"></i> Begin Session
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="breathing-session">
+                <div class="technique-name">@selectedTechnique?.Name</div>
+
+                <div class="breathing-circle-container">
+                    <div class="breathing-circle @currentPhase.ToLower()">
+                        <div class="inner-circle">
+                            <span class="phase-text">@GetPhaseText()</span>
+                            <span class="phase-timer">@phaseTimeRemaining</span>
+                        </div>
+                    </div>
+                    <div class="circle-glow @currentPhase.ToLower()"></div>
+                </div>
+
+                <div class="breathing-instructions">
+                    @switch (currentPhase)
+                    {
+                        case "Inhale":
+                            <p><i class="bi bi-arrow-up-circle"></i> Breathe in slowly through your nose</p>
+                            break;
+                        case "Hold":
+                            <p><i class="bi bi-pause-circle"></i> Hold your breath gently</p>
+                            break;
+                        case "Exhale":
+                            <p><i class="bi bi-arrow-down-circle"></i> Release slowly through your mouth</p>
+                            break;
+                        default:
+                            <p><i class="bi bi-circle"></i> Get ready...</p>
+                            break;
+                    }
+                </div>
+
+                <div class="session-stats">
+                    <div class="stat-item">
+                        <i class="bi bi-arrow-repeat"></i>
+                        <span class="stat-value">@cyclesCompleted</span>
+                        <span class="stat-label">Cycles</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="bi bi-clock"></i>
+                        <span class="stat-value">@FormatTime(elapsedSeconds)</span>
+                        <span class="stat-label">Duration</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="bi bi-lungs"></i>
+                        <span class="stat-value">@totalBreaths</span>
+                        <span class="stat-label">Breaths</span>
+                    </div>
+                </div>
+
+                <div class="control-buttons">
+                    <button class="control-btn pause" @onclick="TogglePause">
+                        <i class="bi @(isPaused ? "bi-play-fill" : "bi-pause-fill")"></i>
+                        @(isPaused ? "Resume" : "Pause")
+                    </button>
+                    <button class="control-btn end" @onclick="EndSession">
+                        <i class="bi bi-stop-fill"></i>
+                        End Session
+                    </button>
+                </div>
+            </div>
+        }
+
+        @if (showSummary)
+        {
+            <div class="summary-overlay">
+                <div class="summary-card">
+                    <div class="summary-icon">
+                        <i class="bi bi-heart-pulse"></i>
+                    </div>
+                    <h2>Great Session!</h2>
+                    <p>You've completed your breathing exercise</p>
+
+                    <div class="summary-stats">
+                        <div class="summary-stat">
+                            <span class="value">@cyclesCompleted</span>
+                            <span class="label">Breathing Cycles</span>
+                        </div>
+                        <div class="summary-stat">
+                            <span class="value">@FormatTime(elapsedSeconds)</span>
+                            <span class="label">Total Duration</span>
+                        </div>
+                        <div class="summary-stat">
+                            <span class="value">@totalBreaths</span>
+                            <span class="label">Total Breaths</span>
+                        </div>
+                    </div>
+
+                    <div class="wellness-tip">
+                        <i class="bi bi-lightbulb"></i>
+                        <span>@GetWellnessTip()</span>
+                    </div>
+
+                    <!-- AI Feedback Section -->
+                    @if (isLoadingAIFeedback)
+                    {
+                        <div class="ai-loading">
+                            <i class="bi bi-robot spinning"></i>
+                            <span>AI is analyzing your session...</span>
+                        </div>
+                    }
+                    else if (aiAnalysis != null)
+                    {
+                        <div class="ai-feedback">
+                            <div class="ai-header">
+                                <i class="bi bi-robot"></i>
+                                <span>AI Wellness Coach</span>
+                            </div>
+                            <div class="ai-content">
+                                <p>@aiAnalysis.Feedback</p>
+                                @if (!string.IsNullOrEmpty(aiAnalysis.Recommendation))
+                                {
+                                    <div class="ai-recommendation">
+                                        <strong><i class="bi bi-heart"></i> Recommendation:</strong>
+                                        <span>@aiAnalysis.Recommendation</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <div class="summary-actions">
+                        <button class="action-btn primary" @onclick="ResetSession">
+                            <i class="bi bi-arrow-repeat"></i> New Session
+                        </button>
+                        <button class="action-btn secondary" @onclick="GoBack">
+                            <i class="bi bi-grid"></i> All Activities
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private bool sessionStarted = false;
+    private bool isPaused = false;
+    private bool showSummary = false;
+    private BreathingTechnique? selectedTechnique;
+    private string currentPhase = "Ready";
+    private int phaseTimeRemaining = 0;
+    private int cyclesCompleted = 0;
+    private int totalBreaths = 0;
+    private int elapsedSeconds = 0;
+    private System.Timers.Timer? breathingTimer;
+    private int currentPhaseIndex = 0;
+    
+    // User info from localStorage
+    private int userId = 0;
+    private string username = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var userIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+                var usernameStr = await JS.InvokeAsync<string>("localStorage.getItem", "username");
+                
+                if (!string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out var parsedId))
+                {
+                    userId = parsedId;
+                }
+                username = usernameStr ?? "";
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading user info: {ex.Message}");
+            }
+        }
+    }
+    
+    // AI Analysis variables
+    private ActivityAIResult? aiAnalysis;
+    private bool isLoadingAIFeedback = false;
+
+    private class ActivityAIResult
+    {
+        public string Feedback { get; set; } = "";
+        public string Recommendation { get; set; } = "";
+        public int CognitiveScore { get; set; }
+        public List<string> StrengthAreas { get; set; } = new();
+        public List<string> ImprovementAreas { get; set; } = new();
+    }
+
+    private List<BreathingTechnique> breathingTechniques = new()
+    {
+        new BreathingTechnique
+        {
+            Name = "Box Breathing",
+            Description = "Equal timing for calm focus",
+            Icon = "bi-square",
+            InhaleSeconds = 4,
+            HoldSeconds = 4,
+            ExhaleSeconds = 4
+        },
+        new BreathingTechnique
+        {
+            Name = "4-7-8 Relaxation",
+            Description = "Deep relaxation technique",
+            Icon = "bi-moon-stars",
+            InhaleSeconds = 4,
+            HoldSeconds = 7,
+            ExhaleSeconds = 8
+        },
+        new BreathingTechnique
+        {
+            Name = "Energizing Breath",
+            Description = "Quick energizing pattern",
+            Icon = "bi-lightning",
+            InhaleSeconds = 6,
+            HoldSeconds = 2,
+            ExhaleSeconds = 4
+        },
+        new BreathingTechnique
+        {
+            Name = "Simple Calm",
+            Description = "Easy beginner pattern",
+            Icon = "bi-heart",
+            InhaleSeconds = 4,
+            HoldSeconds = 2,
+            ExhaleSeconds = 6
+        }
+    };
+
+    private List<string> wellnessTips = new()
+    {
+        "Regular breathing exercises can reduce stress and anxiety levels.",
+        "Try to practice breathing exercises at the same time each day.",
+        "Deep breathing activates your parasympathetic nervous system.",
+        "Even 5 minutes of breathing exercises can make a difference.",
+        "Combine breathing with gentle stretching for maximum benefit.",
+        "Breathing exercises before sleep can improve sleep quality."
+    };
+
+    private class BreathingTechnique
+    {
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Icon { get; set; } = "";
+        public int InhaleSeconds { get; set; }
+        public int HoldSeconds { get; set; }
+        public int ExhaleSeconds { get; set; }
+    }
+
+    private void SelectTechnique(BreathingTechnique technique)
+    {
+        selectedTechnique = technique;
+    }
+
+    private void StartSession()
+    {
+        if (selectedTechnique == null) return;
+
+        sessionStarted = true;
+        isPaused = false;
+        showSummary = false;
+        cyclesCompleted = 0;
+        totalBreaths = 0;
+        elapsedSeconds = 0;
+        currentPhaseIndex = 0;
+        SetPhase();
+        StartTimer();
+    }
+
+    private void SetPhase()
+    {
+        switch (currentPhaseIndex % 3)
+        {
+            case 0:
+                currentPhase = "Inhale";
+                phaseTimeRemaining = selectedTechnique!.InhaleSeconds;
+                break;
+            case 1:
+                currentPhase = "Hold";
+                phaseTimeRemaining = selectedTechnique!.HoldSeconds;
+                break;
+            case 2:
+                currentPhase = "Exhale";
+                phaseTimeRemaining = selectedTechnique!.ExhaleSeconds;
+                break;
+        }
+    }
+
+    private void StartTimer()
+    {
+        breathingTimer?.Stop();
+        breathingTimer?.Dispose();
+
+        breathingTimer = new System.Timers.Timer(1000);
+        breathingTimer.Elapsed += async (s, e) =>
+        {
+            if (isPaused) return;
+
+            elapsedSeconds++;
+            phaseTimeRemaining--;
+
+            if (phaseTimeRemaining <= 0)
+            {
+                currentPhaseIndex++;
+                
+                if (currentPhaseIndex % 3 == 0)
+                {
+                    cyclesCompleted++;
+                    totalBreaths++;
+                }
+
+                SetPhase();
+            }
+
+            await InvokeAsync(StateHasChanged);
+        };
+        breathingTimer.Start();
+    }
+
+    private void TogglePause()
+    {
+        isPaused = !isPaused;
+    }
+
+    private async Task EndSession()
+    {
+        breathingTimer?.Stop();
+        breathingTimer?.Dispose();
+        await SaveActivitySession();
+        await LoadAIFeedback();
+        showSummary = true;
+    }
+
+    private async Task LoadAIFeedback()
+    {
+        isLoadingAIFeedback = true;
+        StateHasChanged();
+
+        try
+        {
+            var session = new AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession
+            {
+                UserId = 1,
+                ActivityType = "BreathingExercise",
+                StartTime = DateTime.UtcNow.AddSeconds(-elapsedSeconds),
+                EndTime = DateTime.UtcNow,
+                DurationSeconds = elapsedSeconds,
+                Score = cyclesCompleted * 10,
+                Accuracy = 100,
+                Difficulty = selectedTechnique?.Name ?? "Standard",
+                ActivityData = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    exerciseType = selectedTechnique?.Name,
+                    cyclesCompleted,
+                    totalBreaths,
+                    totalDurationSeconds = elapsedSeconds,
+                    averageCycleDuration = cyclesCompleted > 0 ? elapsedSeconds / cyclesCompleted : 0
+                })
+            };
+
+            var result = await AIService.AnalyzeActivityPerformanceAsync(session, new List<AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession>());
+            aiAnalysis = new ActivityAIResult
+            {
+                Feedback = result.Encouragement,
+                Recommendation = result.PatternAnalysis,
+                CognitiveScore = 0,
+                StrengthAreas = result.CognitiveStrengths,
+                ImprovementAreas = result.AreasForGrowth
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"AI analysis error: {ex.Message}");
+            aiAnalysis = new ActivityAIResult
+            {
+                Feedback = cyclesCompleted >= 5 
+                    ? "Wonderful mindfulness session! Taking time to breathe deeply shows great self-care." 
+                    : cyclesCompleted >= 3 
+                    ? "Good start! Regular breathing practice builds stress resilience." 
+                    : "Every breath counts! Even short sessions benefit your wellbeing.",
+                Recommendation = elapsedSeconds >= 300 
+                    ? "You're building a great habit! Try to practice daily for best results." 
+                    : "Try to extend your sessions gradually to 5+ minutes for deeper relaxation."
+            };
+        }
+        finally
+        {
+            isLoadingAIFeedback = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveActivitySession()
+    {
+        try
+        {
+            var activityData = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                exerciseType = selectedTechnique?.Name ?? "Unknown",
+                cyclesCompleted = cyclesCompleted,
+                totalCycles = cyclesCompleted,
+                totalBreathingTimeSeconds = elapsedSeconds,
+                completedFully = true
+            });
+
+            var request = new
+            {
+                userId = userId,
+                username = username,
+                activityType = "BreathingExercise",
+                activityName = "Breathing Exercise",
+                durationSeconds = elapsedSeconds,
+                score = cyclesCompleted * 10,
+                accuracy = 100m,
+                completionPercentage = 100,
+                difficulty = selectedTechnique?.Name ?? "Standard",
+                activityData = activityData,
+                moodBefore = "",
+                moodAfter = "Calm"
+            };
+
+            var apiUrl = $"{Navigation.BaseUri}api/activities/save";
+            await Http.PostAsJsonAsync(apiUrl, request);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving activity: {ex.Message}");
+        }
+    }
+
+    private void ResetSession()
+    {
+        sessionStarted = false;
+        showSummary = false;
+        selectedTechnique = null;
+        currentPhase = "Ready";
+    }
+
+    private string FormatTime(int seconds)
+    {
+        var mins = seconds / 60;
+        var secs = seconds % 60;
+        return $"{mins}:{secs:D2}";
+    }
+
+    private string GetPhaseText()
+    {
+        return currentPhase;
+    }
+
+    private string GetWellnessTip()
+    {
+        var random = new Random();
+        return wellnessTips[random.Next(wellnessTips.Count)];
+    }
+
+    private void GoBack()
+    {
+        breathingTimer?.Stop();
+        breathingTimer?.Dispose();
+        Navigation.NavigateTo("/games");
+    }
+
+    public void Dispose()
+    {
+        breathingTimer?.Stop();
+        breathingTimer?.Dispose();
+    }
+}
+
+<style>
+    .activity-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    }
+
+    .activity-header {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        padding: 1.5rem 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .back-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        border: 2px solid rgba(255,255,255,0.3);
+        background: rgba(255,255,255,0.1);
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        transition: all 200ms;
+    }
+
+    .back-btn:hover {
+        background: rgba(255,255,255,0.2);
+    }
+
+    .header-info {
+        flex-grow: 1;
+    }
+
+    .header-info h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .header-info p {
+        margin: 0.25rem 0 0;
+        opacity: 0.9;
+        font-size: 0.9rem;
+    }
+
+    .session-time {
+        background: rgba(255,255,255,0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 10px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .breathing-content {
+        max-width: 800px;
+        margin: 2rem auto;
+        padding: 0 1.5rem;
+    }
+
+    .start-screen {
+        background: white;
+        border-radius: 24px;
+        padding: 3rem;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+
+    .breathing-icon {
+        width: 100px;
+        height: 100px;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 3rem;
+        color: white;
+    }
+
+    .start-screen h2 {
+        margin: 0 0 0.5rem;
+        font-size: 2rem;
+        color: #1f2937;
+    }
+
+    .start-screen > p {
+        color: #6b7280;
+        margin-bottom: 2rem;
+    }
+
+    .technique-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .technique-card {
+        background: #f9fafb;
+        border: 2px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 1.5rem;
+        cursor: pointer;
+        transition: all 200ms;
+        text-align: left;
+    }
+
+    .technique-card:hover {
+        border-color: #10b981;
+        background: #ecfdf5;
+    }
+
+    .technique-card.selected {
+        border-color: #10b981;
+        background: #ecfdf5;
+        box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+    }
+
+    .technique-card i {
+        font-size: 2rem;
+        color: #10b981;
+        margin-bottom: 0.75rem;
+    }
+
+    .technique-card h3 {
+        margin: 0 0 0.5rem;
+        color: #1f2937;
+        font-size: 1.125rem;
+    }
+
+    .technique-card p {
+        margin: 0 0 0.75rem;
+        color: #6b7280;
+        font-size: 0.875rem;
+    }
+
+    .technique-pattern {
+        font-size: 0.75rem;
+        color: #10b981;
+        font-weight: 600;
+    }
+
+    .start-btn {
+        padding: 1rem 3rem;
+        font-size: 1.25rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border: none;
+        border-radius: 16px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        transition: all 300ms;
+    }
+
+    .start-btn:hover:not(:disabled) {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 30px rgba(16, 185, 129, 0.4);
+    }
+
+    .start-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .breathing-session {
+        text-align: center;
+    }
+
+    .technique-name {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #059669;
+        margin-bottom: 2rem;
+    }
+
+    .breathing-circle-container {
+        position: relative;
+        width: 300px;
+        height: 300px;
+        margin: 0 auto 2rem;
+    }
+
+    .breathing-circle {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        background: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        z-index: 2;
+        box-shadow: 0 10px 50px rgba(0,0,0,0.1);
+        transition: transform 0.5s ease-in-out;
+    }
+
+    .breathing-circle.inhale {
+        transform: scale(1.15);
+    }
+
+    .breathing-circle.hold {
+        transform: scale(1.15);
+    }
+
+    .breathing-circle.exhale {
+        transform: scale(1);
+    }
+
+    .inner-circle {
+        text-align: center;
+    }
+
+    .phase-text {
+        display: block;
+        font-size: 2rem;
+        font-weight: 700;
+        color: #10b981;
+        margin-bottom: 0.5rem;
+    }
+
+    .phase-timer {
+        display: block;
+        font-size: 4rem;
+        font-weight: 800;
+        color: #1f2937;
+    }
+
+    .circle-glow {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 320px;
+        height: 320px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(16, 185, 129, 0.3) 0%, transparent 70%);
+        z-index: 1;
+        transition: all 0.5s ease-in-out;
+    }
+
+    .circle-glow.inhale {
+        transform: translate(-50%, -50%) scale(1.3);
+        opacity: 1;
+    }
+
+    .circle-glow.exhale {
+        transform: translate(-50%, -50%) scale(0.9);
+        opacity: 0.5;
+    }
+
+    .breathing-instructions {
+        margin-bottom: 2rem;
+    }
+
+    .breathing-instructions p {
+        font-size: 1.125rem;
+        color: #4b5563;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .breathing-instructions i {
+        font-size: 1.5rem;
+        color: #10b981;
+    }
+
+    .session-stats {
+        display: flex;
+        justify-content: center;
+        gap: 3rem;
+        margin-bottom: 2rem;
+        background: white;
+        padding: 1.5rem;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    }
+
+    .stat-item {
+        text-align: center;
+    }
+
+    .stat-item i {
+        font-size: 1.5rem;
+        color: #10b981;
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-item .stat-value {
+        display: block;
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .stat-item .stat-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .control-buttons {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+    }
+
+    .control-btn {
+        padding: 1rem 2rem;
+        border-radius: 12px;
+        font-weight: 600;
+        font-family: inherit;
+        font-size: 1rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .control-btn.pause {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border: none;
+    }
+
+    .control-btn.pause:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+    }
+
+    .control-btn.end {
+        background: white;
+        color: #6b7280;
+        border: 2px solid #e5e7eb;
+    }
+
+    .control-btn.end:hover {
+        border-color: #9ca3af;
+    }
+
+    .summary-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+        padding: 1rem;
+    }
+
+    .summary-card {
+        background: white;
+        border-radius: 24px;
+        padding: 3rem;
+        text-align: center;
+        max-width: 500px;
+        width: 100%;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+
+    .summary-icon {
+        width: 80px;
+        height: 80px;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 2.5rem;
+        color: white;
+    }
+
+    .summary-card h2 {
+        margin: 0 0 0.5rem;
+        font-size: 1.75rem;
+        color: #1f2937;
+    }
+
+    .summary-card > p {
+        color: #6b7280;
+        margin-bottom: 2rem;
+    }
+
+    .summary-stats {
+        display: flex;
+        justify-content: center;
+        gap: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .summary-stat {
+        text-align: center;
+    }
+
+    .summary-stat .value {
+        display: block;
+        font-size: 2rem;
+        font-weight: 700;
+        color: #10b981;
+    }
+
+    .summary-stat .label {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .wellness-tip {
+        background: #ecfdf5;
+        padding: 1rem 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        text-align: left;
+    }
+
+    .wellness-tip i {
+        font-size: 1.5rem;
+        color: #10b981;
+        flex-shrink: 0;
+    }
+
+    .wellness-tip span {
+        color: #047857;
+        font-size: 0.9rem;
+    }
+
+    .summary-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+    }
+
+    .action-btn {
+        padding: 1rem 2rem;
+        border-radius: 12px;
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .action-btn.primary {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border: none;
+    }
+
+    .action-btn.primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+    }
+
+    .action-btn.secondary {
+        background: white;
+        border: 2px solid #e5e7eb;
+        color: #6b7280;
+    }
+
+    .action-btn.secondary:hover {
+        border-color: #9ca3af;
+    }
+
+    /* AI Feedback Styles */
+    .ai-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        padding: 1.25rem;
+        background: #ecfdf5;
+        border-radius: 12px;
+        color: #047857;
+        margin-bottom: 1.5rem;
+    }
+
+    .ai-loading .spinning {
+        animation: spin 1s linear infinite;
+    }
+
+    .ai-feedback {
+        background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+        border: 1px solid #a7f3d0;
+        border-radius: 16px;
+        overflow: hidden;
+        margin-bottom: 1.5rem;
+    }
+
+    .ai-header {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        padding: 0.75rem 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+    }
+
+    .ai-content {
+        padding: 1.25rem;
+    }
+
+    .ai-content p {
+        margin: 0 0 1rem;
+        color: #047857;
+        line-height: 1.6;
+    }
+
+    .ai-recommendation {
+        background: white;
+        padding: 1rem;
+        border-radius: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .ai-recommendation strong {
+        color: #059669;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .ai-recommendation span {
+        color: #374151;
+    }
+
+    @@keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    @@media (max-width: 640px) {
+        .technique-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .breathing-circle-container {
+            width: 250px;
+            height: 250px;
+        }
+
+        .session-stats {
+            gap: 1.5rem;
+            padding: 1rem;
+        }
+
+        .control-buttons {
+            flex-direction: column;
+        }
+    }
+</style>

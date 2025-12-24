@@ -1,0 +1,863 @@
+@page "/games/reaction-trainer"
+@using AdaptiveCognitiveRehabilitationPlatform.Services
+@using NeuroPath.Models
+@using AdaptiveCognitiveRehabilitationPlatform.Services.GameAnalytics
+@inject ILogger<ReactionTrainer> Logger
+@inject GameStatisticsService StatsService
+@inject GameAiAnalysisService AiService
+@inject IGameSessionRepository SessionRepository
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Reaction Trainer</PageTitle>
+
+<div class="game-container">
+    <h1><i class="bi bi-lightning-charge-fill"></i> Reaction Trainer</h1>
+    
+    @if (!gameStarted && !gameEnded) {
+        <div class="difficulty-box">
+            <h2>Select Difficulty Level</h2>
+            <div class="difficulty-buttons">
+                <button class="diff-btn @(selectedLevel == 1 ? "active" : "")" 
+                        @onclick="() => HandleSelectLevel(1)">
+                    <i class="bi bi-lightning-fill"></i>
+                    <span>Easy (5 rounds)</span>
+                </button>
+                <button class="diff-btn @(selectedLevel == 2 ? "active" : "")" 
+                        @onclick="() => HandleSelectLevel(2)">
+                    <i class="bi bi-star-fill"></i>
+                    <span>Medium (10 rounds)</span>
+                </button>
+                <button class="diff-btn @(selectedLevel == 3 ? "active" : "")" 
+                        @onclick="() => HandleSelectLevel(3)">
+                    <i class="bi bi-fire"></i>
+                    <span>Hard (15 rounds)</span>
+                </button>
+            </div>
+            <button class="start-btn" @onclick="HandleStartGame" disabled="@(selectedLevel == 0)">
+                <i class="bi bi-play-fill"></i> START GAME
+            </button>
+        </div>
+    }
+    
+    @if (gameStarted && !gameEnded && !roundStarted) {
+        <div class="waiting-box">
+            <h2>Get Ready!</h2>
+            <p>Round @(currentRound + 1) of @totalRounds</p>
+            <button class="start-round-btn" @onclick="@((MouseEventArgs e) => HandleInitiateRound())">
+                <i class="bi bi-hand-thumbs-up-fill"></i> START ROUND
+            </button>
+        </div>
+    }
+    
+    @if (gameStarted && !gameEnded && roundStarted && !signalShown) {
+        <div class="countdown-box">
+            <div class="countdown-display">
+                @if (countdown > 0) {
+                    <div class="countdown-number">@countdown</div>
+                }
+                else {
+                    <div class="waiting-signal">Wait...</div>
+                }
+            </div>
+        </div>
+    }
+    
+    @if (gameStarted && !gameEnded && roundStarted && signalShown) {
+        <div class="signal-box">
+            <div class="signal-circle active"></div>
+            <h2>TAP AS FAST AS YOU CAN!</h2>
+            <button class="react-btn" @onclick="@((MouseEventArgs e) => HandleRecordReaction())">
+                <i class="bi bi-finger-index"></i> CLICK HERE!
+            </button>
+        </div>
+    }
+    
+    @if (gameEnded) {
+        <div class="results-box">
+            <h2><i class="bi bi-trophy-fill"></i> Game Complete!</h2>
+            
+            @if (aiAnalyzing) {
+                <div class="ai-analyzing">
+                    <div class="spinner"></div>
+                    <p>AI is analyzing your performance...</p>
+                </div>
+            }
+            else if (_aiResponse != null) {
+                <div class="performance-score-badge">
+                    @((int)_aiResponse.PerformanceScore)
+                </div>
+                
+                <div class="stats">
+                    <p>Total Rounds: <strong>@totalRounds</strong></p>
+                    <p>Average Reaction Time: <strong>@averageReactionTime</strong>ms</p>
+                    <p>Best Time: <strong>@bestReactionTime</strong>ms</p>
+                    <p>Worst Time: <strong>@worstReactionTime</strong>ms</p>
+                </div>
+
+                <div class="ai-feedback">
+                    <div class="feedback-section">
+                        <h3><i class="bi bi-star-fill"></i> Encouragement</h3>
+                        <p>@_aiResponse.Encouragement</p>
+                    </div>
+                    <div class="feedback-section">
+                        <h3><i class="bi bi-heart-fill"></i> Effort Note</h3>
+                        <p>@_aiResponse.EffortNote</p>
+                    </div>
+                    <div class="feedback-section">
+                        <h3><i class="bi bi-emoji-smile"></i> Fun Message</h3>
+                        <p>@_aiResponse.FunMessage</p>
+                    </div>
+                    @if (_aiResponse.NextDifficultyLevel != selectedLevel) {
+                        <div class="feedback-section next-level">
+                            <h3><i class="bi bi-arrow-up-circle-fill"></i> Level Recommendation</h3>
+                            <p>Level @_aiResponse.NextDifficultyLevel (@(_aiResponse.NextDifficultyLevel > selectedLevel ? "Harder" : "Easier")) - Confidence: @($"{_aiResponse.Confidence:P0}")</p>
+                        </div>
+                    }
+                </div>
+            }
+            else {
+                <div class="stats">
+                    <p>Total Rounds: <strong>@totalRounds</strong></p>
+                    <p>Average Reaction Time: <strong>@averageReactionTime</strong>ms</p>
+                    <p>Best Time: <strong>@bestReactionTime</strong>ms</p>
+                    <p>Worst Time: <strong>@worstReactionTime</strong>ms</p>
+                    <div class="reactions-list">
+                        <h3>Your Reaction Times:</h3>
+                        @foreach (var time in reactionTimes) {
+                            <span class="reaction-badge">@time ms</span>
+                        }
+                    </div>
+                </div>
+            }
+            
+            <div class="action-buttons">
+                <button class="reset-btn" @onclick="@((MouseEventArgs e) => HandleResetGame())">
+                    <i class="bi bi-arrow-clockwise"></i> Try Again
+                </button>
+                <button class="home-btn" @onclick="@((MouseEventArgs e) => NavigateHome())">
+                    <i class="bi bi-house-door"></i> Back to Games
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .game-container {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 20px;
+        font-family: ''Segoe UI'', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .game-container h1 {
+        color: white;
+        font-size: 2.5em;
+        margin-bottom: 30px;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .game-container i {
+        margin-right: 10px;
+    }
+
+    .difficulty-box {
+        background: white;
+        border-radius: 20px;
+        padding: 40px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        text-align: center;
+        max-width: 600px;
+        width: 100%;
+    }
+
+    .difficulty-box h2 {
+        color: #333;
+        margin-bottom: 25px;
+        font-size: 1.8em;
+    }
+
+    .difficulty-buttons {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 25px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .diff-btn {
+        background: #f0f0f0;
+        border: 2px solid #ddd;
+        padding: 12px 20px;
+        border-radius: 10px;
+        font-size: 1em;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 140px;
+    }
+
+    .diff-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .diff-btn.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: #667eea;
+    }
+
+    .start-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 15px 40px;
+        font-size: 1.2em;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: bold;
+        width: 100%;
+    }
+
+    .start-btn:hover:not(:disabled) {
+        transform: scale(1.05);
+        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .start-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .waiting-box {
+        background: white;
+        border-radius: 20px;
+        padding: 60px 40px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        text-align: center;
+        max-width: 600px;
+    }
+
+    .waiting-box h2 {
+        color: #667eea;
+        font-size: 2.5em;
+        margin-bottom: 15px;
+    }
+
+    .waiting-box p {
+        color: #666;
+        font-size: 1.3em;
+        margin-bottom: 25px;
+    }
+
+    .start-round-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 15px 30px;
+        font-size: 1.1em;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: bold;
+    }
+
+    .start-round-btn:hover {
+        transform: scale(1.05);
+        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .countdown-box {
+        background: white;
+        border-radius: 20px;
+        padding: 60px 40px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        text-align: center;
+        max-width: 600px;
+    }
+
+    .countdown-display {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 300px;
+    }
+
+    .countdown-number {
+        font-size: 8em;
+        font-weight: bold;
+        color: #667eea;
+        animation: pulse 1s infinite;
+    }
+
+    .waiting-signal {
+        font-size: 2.5em;
+        color: #999;
+        font-weight: bold;
+    }
+
+    @@keyframes pulse {
+        0%, 100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+        50% {
+            transform: scale(1.1);
+            opacity: 0.8;
+        }
+    }
+
+    .signal-box {
+        background: white;
+        border-radius: 20px;
+        padding: 60px 40px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        text-align: center;
+        max-width: 600px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 30px;
+    }
+
+    .signal-circle {
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        background: #ccc;
+        transition: all 0.1s ease;
+    }
+
+    .signal-circle.active {
+        background: #28a745;
+        box-shadow: 0 0 40px rgba(40, 167, 69, 0.8);
+        animation: glow 0.5s infinite alternate;
+    }
+
+    @@keyframes glow {
+        from {
+            box-shadow: 0 0 40px rgba(40, 167, 69, 0.8);
+        }
+        to {
+            box-shadow: 0 0 70px rgba(40, 167, 69, 1);
+        }
+    }
+
+    .signal-box h2 {
+        color: #333;
+        font-size: 1.8em;
+        margin: 0;
+    }
+
+    .react-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 20px 50px;
+        font-size: 1.3em;
+        border-radius: 15px;
+        cursor: pointer;
+        transition: all 0.1s ease;
+        font-weight: bold;
+    }
+
+    .react-btn:active {
+        transform: scale(0.95);
+    }
+
+    .react-btn:hover {
+        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .results-box {
+        background: white;
+        border-radius: 20px;
+        padding: 40px;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        max-width: 700px;
+    }
+
+    .results-box h2 {
+        color: #667eea;
+        margin-bottom: 25px;
+    }
+
+    .stats {
+        background: #f9f9f9;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 25px;
+    }
+
+    .stats p {
+        font-size: 1.1em;
+        margin: 12px 0;
+        color: #333;
+    }
+
+    .reactions-list {
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 15px;
+    }
+
+    .reactions-list h3 {
+        color: #667eea;
+        margin-bottom: 10px;
+    }
+
+    .reaction-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 6px 12px;
+        border-radius: 20px;
+        margin: 4px;
+        font-weight: bold;
+        font-size: 0.9em;
+    }
+
+    .reset-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 12px 30px;
+        font-size: 1.1em;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: bold;
+    }
+
+    .reset-btn:hover {
+        transform: scale(1.05);
+        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .performance-score-badge {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5em;
+        font-weight: bold;
+        margin: 20px auto;
+        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+    }
+
+    .ai-feedback {
+        background: #f9f9f9;
+        padding: 20px;
+        border-radius: 10px;
+        margin: 20px 0;
+    }
+
+    .feedback-section {
+        background: white;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 8px;
+        text-align: left;
+        border-left: 4px solid #667eea;
+    }
+
+    .feedback-section h3 {
+        color: #667eea;
+        margin: 0 0 8px 0;
+        font-size: 1rem;
+    }
+
+    .feedback-section p {
+        color: #555;
+        margin: 0;
+        line-height: 1.5;
+    }
+
+    .feedback-section.next-level {
+        border-left-color: #28a745;
+        background: #f0f8ff;
+    }
+
+    .ai-analyzing {
+        text-align: center;
+        padding: 40px;
+    }
+
+    .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #667eea;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+        margin: 20px auto;
+    }
+
+    @@keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .home-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 12px 30px;
+        font-size: 1.1em;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: bold;
+    }
+
+    .home-btn:hover {
+        transform: scale(1.05);
+        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+</style>
+
+@code {
+    private int selectedLevel = 0;
+    private bool gameStarted = false;
+    private bool gameEnded = false;
+    private bool roundStarted = false;
+    private bool signalShown = false;
+    private bool aiAnalyzing = false;
+    private int currentRound = 0;
+    private int totalRounds = 0;
+    private int countdown = 0;
+    private DateTime? signalStartTime;
+    private List<int> reactionTimes = new();
+    private int averageReactionTime = 0;
+    private int bestReactionTime = 0;
+    private int worstReactionTime = 0;
+    private GameSessionResult? _gameSessionResult;
+    private GameAiAnalysisService.AiAnalysisResponse? _aiResponse;
+
+    // Current user context (TODO: Get from authentication)
+    private int currentUserId = 1;
+    private int currentProfileId = 1;
+
+    private void HandleSelectLevel(int level) {
+        selectedLevel = level;
+        Logger?.LogInformation($"Level selected: {level}");
+        StateHasChanged();
+    }
+
+    private void HandleStartGame() {
+        if (selectedLevel == 0) {
+            Logger?.LogWarning("Attempted to start game without selecting a level");
+            return;
+        }
+        gameStarted = true;
+        gameEnded = false;
+        roundStarted = false;
+        signalShown = false;
+        currentRound = 0;
+        reactionTimes.Clear();
+        totalRounds = selectedLevel == 1 ? 5 : (selectedLevel == 2 ? 10 : 15);
+        Logger?.LogInformation($"Game started - Total rounds: {totalRounds}");
+        StateHasChanged();
+    }
+
+    private async Task HandleInitiateRound() {
+        roundStarted = true;
+        signalShown = false;
+        countdown = 3;
+        StateHasChanged();
+
+        for (int i = 3; i > 0; i--) {
+            await Task.Delay(1000);
+            countdown = i - 1;
+            StateHasChanged();
+        }
+
+        Random random = new();
+        int delay = random.Next(1000, 3000);
+        await Task.Delay(delay);
+
+        signalShown = true;
+        signalStartTime = DateTime.Now;
+        StateHasChanged();
+    }
+
+    private async Task HandleRecordReaction() {
+        if (!signalShown || signalStartTime == null) return;
+
+        int reactionTime = (int)(DateTime.Now - signalStartTime.Value).TotalMilliseconds;
+        reactionTimes.Add(reactionTime);
+        currentRound++;
+        roundStarted = false;
+        signalShown = false;
+
+        if (currentRound >= totalRounds) {
+            await HandleEndGame();
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task HandleEndGame() {
+        gameEnded = true;
+        gameStarted = false;
+        roundStarted = false;
+        signalShown = false;
+
+        if (reactionTimes.Count > 0) {
+            averageReactionTime = (int)reactionTimes.Average();
+            bestReactionTime = reactionTimes.Min();
+            worstReactionTime = reactionTimes.Max();
+        }
+
+        // Create game session result for AI analysis
+        var accuracy = reactionTimes.Count > 0 ? (averageReactionTime <= 300 ? 95 : 
+                                                   averageReactionTime <= 400 ? 85 : 
+                                                   averageReactionTime <= 500 ? 75 : 60) : 50;
+        
+        _gameSessionResult = new GameSessionResult
+        {
+            GameType = "Reaction Trainer",
+            DifficultyLevel = selectedLevel,
+            TotalMoves = totalRounds,
+            TotalMatches = totalRounds,
+            CorrectMatches = totalRounds,
+            ErrorCount = 0,
+            ElapsedSeconds = averageReactionTime / 1000,
+            StartTime = DateTime.Now.AddSeconds(-averageReactionTime / 1000),
+            EndTime = DateTime.Now,
+            AccuracyPercentage = accuracy,
+            SpeedScore = 100 - Math.Min((averageReactionTime - 250) / 5, 50),
+            ConsistencyScore = 100 - ((worstReactionTime - bestReactionTime) / 10),
+            OverallScore = (accuracy * 0.5) + ((100 - Math.Min((averageReactionTime - 250) / 5, 50)) * 0.5)
+        };
+
+        await SaveGameSessionAsync();
+        AnalyzeGameWithAI();
+        StateHasChanged();
+    }
+
+    private async Task SaveGameSessionAsync()
+    {
+        try
+        {
+            var session = new GameSession
+            {
+                UserId = currentUserId,
+                ProfileId = currentProfileId,
+                GameType = "ReactionTrainer",
+                Difficulty = selectedLevel,
+                Status = "Completed",
+                TimeStarted = DateTime.UtcNow.AddSeconds(-totalRounds * 5), // Estimate start time
+                TimeCompleted = DateTime.UtcNow,
+                TotalSeconds = totalRounds * 5,
+                TotalMoves = totalRounds,
+                CorrectMatches = totalRounds,
+                Accuracy = (decimal)(_gameSessionResult?.AccuracyPercentage ?? 0),
+                PerformanceScore = (int)(_gameSessionResult?.OverallScore ?? 0),
+                EfficiencyScore = (decimal)(100 - Math.Min((averageReactionTime - 250) / 5.0, 50)),
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                Notes = $"Reaction Trainer - Level {selectedLevel} - Avg reaction: {averageReactionTime}ms"
+            };
+
+            // Save via local repository
+            await SessionRepository.CreateSessionAsync(session);
+            
+            // Also save via HTTP API endpoint for consistency
+            try
+            {
+                var request = new
+                {
+                    UserId = currentUserId,
+                    ProfileId = currentProfileId,
+                    GameType = "ReactionTrainer",
+                    Difficulty = selectedLevel,
+                    TotalSeconds = totalRounds * 5,
+                    TotalMoves = totalRounds,
+                    CorrectMatches = totalRounds,
+                    PerformanceScore = (int)(_gameSessionResult?.OverallScore ?? 0)
+                };
+                
+                await Http.PostAsJsonAsync("/api/game/save-session", request);
+                Logger?.LogInformation($"Game session saved via API: ReactionTrainer Level {selectedLevel}");
+            }
+            catch (Exception apiEx)
+            {
+                Logger?.LogWarning($"Failed to save via API (local save succeeded): {apiEx.Message}");
+            }
+            
+            Logger?.LogInformation($"Game session saved: ReactionTrainer Level {selectedLevel} - Avg: {averageReactionTime}ms");
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"Failed to save game session: {ex.Message}");
+        }
+    }
+
+    private async void AnalyzeGameWithAI()
+    {
+        aiAnalyzing = true;
+        StateHasChanged();
+
+        try
+        {
+            _aiResponse = await AiService.AnalyzeGamePerformanceAsync(
+                _gameSessionResult ?? new GameSessionResult(),
+                "Player",
+                0
+            );
+
+            Logger?.LogInformation($"AI Analysis complete: Score {_aiResponse?.PerformanceScore}");
+            
+            // ?? Autosave game result to database
+            await AutosaveGameResultAsync(_aiResponse);
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"AI Analysis failed: {ex.Message}");
+            _aiResponse = new GameAiAnalysisService.AiAnalysisResponse
+            {
+                Encouragement = "Great job! You completed all rounds!",
+                FunMessage = "Your reactions are getting faster!",
+                EffortNote = "Keep practicing to improve!",
+                PerformanceScore = _gameSessionResult?.OverallScore ?? 70,
+                NextDifficultyLevel = Math.Min(3, selectedLevel + 1),
+                Confidence = 0.7
+            };
+            
+            // Still autosave even with fallback response
+            await AutosaveGameResultAsync(_aiResponse);
+        }
+
+        aiAnalyzing = false;
+        StateHasChanged();
+    }
+
+    private async Task AutosaveGameResultAsync(GameAiAnalysisService.AiAnalysisResponse? aiResponse)
+    {
+        try
+        {
+            // Get user info from localStorage
+            var userId = await GetCurrentUserIdAsync();
+            var username = await GetCurrentUsernameAsync();
+
+            var autosaveRequest = new
+            {
+                UserId = userId,
+                Username = username,
+                GameType = "ReactionTrainer",
+                GameMode = "Practice",
+                Difficulty = selectedLevel,
+                DifficultyName = GetDifficultyName(selectedLevel),
+                Score = (int)(aiResponse?.PerformanceScore ?? 0),
+                Accuracy = (decimal)(_gameSessionResult?.AccuracyPercentage ?? 0),
+                TotalMoves = totalRounds,
+                CorrectMoves = totalRounds,
+                ErrorCount = 0,
+                TimeTakenSeconds = totalRounds * 5,
+                AverageReactionTimeMs = (double)averageReactionTime,
+                AiEncouragement = aiResponse?.Encouragement ?? "Great reflexes!",
+                AiFunMessage = aiResponse?.FunMessage ?? "Lightning fast!",
+                AiEffortNote = aiResponse?.EffortNote ?? "Keep training!",
+                RecommendedDifficulty = GetDifficultyName((int)(aiResponse?.NextDifficultyLevel ?? selectedLevel)),
+                AiConfidence = aiResponse?.Confidence ?? 0.7,
+                StartTime = DateTime.UtcNow.AddSeconds(-totalRounds * 5),
+                EndTime = DateTime.UtcNow,
+                Notes = $"Reaction Trainer - Level {selectedLevel} - Avg: {averageReactionTime}ms, Best: {bestReactionTime}ms, Worst: {worstReactionTime}ms"
+            };
+
+            var apiUrl = $"{NavigationManager.BaseUri}api/json-stats/save";
+            var response = await Http.PostAsJsonAsync(apiUrl, autosaveRequest);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                Logger?.LogInformation("? Game result autosaved to JSON (ReactionTrainer)");
+            }
+            else
+            {
+                Logger?.LogWarning($"?? JSON autosave returned status: {response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"? JSON autosave failed: {ex.Message}");
+        }
+    }
+
+    private string GetDifficultyName(int level) => level switch
+    {
+        1 => "Easy",
+        2 => "Medium",
+        3 => "Hard",
+        _ => "Unknown"
+    };
+
+    private async Task<int> GetCurrentUserIdAsync()
+    {
+        try
+        {
+            var userIdStr = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "userId");
+            return int.TryParse(userIdStr, out var id) ? id : 1;
+        }
+        catch { return 1; }
+    }
+
+    private async Task<string> GetCurrentUsernameAsync()
+    {
+        try
+        {
+            var username = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "username");
+            return !string.IsNullOrEmpty(username) ? username : "Guest";
+        }
+        catch { return "Guest"; }
+    }
+
+    private void NavigateHome()
+    {
+        // This would navigate using NavigationManager in a real app
+        HandleResetGame();
+    }
+
+    private void HandleResetGame() {
+        gameStarted = false;
+        gameEnded = false;
+        roundStarted = false;
+        signalShown = false;
+        selectedLevel = 0;
+        currentRound = 0;
+        totalRounds = 0;
+        countdown = 0;
+        signalStartTime = null;
+        reactionTimes.Clear();
+        averageReactionTime = 0;
+        bestReactionTime = 0;
+        worstReactionTime = 0;
+        StateHasChanged();
+    }
+}

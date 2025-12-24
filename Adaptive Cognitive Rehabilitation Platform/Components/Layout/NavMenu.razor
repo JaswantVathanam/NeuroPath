@@ -1,0 +1,137 @@
+@implements IAsyncDisposable
+@using Microsoft.JSInterop
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<div class="navbar">
+    <div class="navbar-brand">
+        <i class="bi bi-heart-pulse"></i>
+        <span>NeuroPath</span>
+    </div>
+    <button class="navbar-toggler" type="button" aria-label="Toggle navigation menu" @onclick="ToggleNavMenu" aria-expanded="@navMenuCssClass?.Contains("show") ?? false">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+</div>
+
+<div class="nav-scrollable @navMenuCssClass" @onclick="ToggleNavMenu">
+    <nav class="nav flex-column">
+        <!-- Home Section -->
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <i class="bi bi-house-door"></i>
+                <span>Home</span>
+            </NavLink>
+        </div>
+
+        <!-- Games Section -->
+        <div class="nav-section" style="@(userRole == "Therapist" ? "display:none" : "")">
+            <div class="nav-section-title"><i class="bi bi-joystick"></i> Games</div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="games/memory-match">
+                    <i class="bi bi-memory"></i>
+                    <span>Memory Match</span>
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="games/reaction-trainer">
+                    <i class="bi bi-lightning-fill"></i>
+                    <span>Reaction Trainer</span>
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="games/sorting-task">
+                    <i class="bi bi-sort-down"></i>
+                    <span>Sorting Task</span>
+                </NavLink>
+            </div>
+        </div>
+
+        <!-- Therapist Section -->
+        @if (userRole == "Therapist")
+        {
+            <div class="nav-section">
+                <div class="nav-section-title"><i class="bi bi-person-heart"></i> Therapist</div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="therapist-dashboard">
+                        <i class="bi bi-person-heart"></i>
+                        <span>Dashboard</span>
+                    </NavLink>
+                </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="therapist-analytics">
+                        <i class="bi bi-graph-up"></i>
+                        <span>Analytics</span>
+                    </NavLink>
+                </div>
+            </div>
+        }
+
+        <!-- Progress & Dashboard Section -->
+        <div class="nav-section" style="@(userRole == "Therapist" ? "display:none" : "")">
+            <div class="nav-section-title"><i class="bi bi-bar-chart"></i> Dashboard</div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="progress">
+                    <i class="bi bi-graph-up"></i>
+                    <span>Progress</span>
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="statistics">
+                    <i class="bi bi-bar-chart"></i>
+                    <span>Statistics</span>
+                </NavLink>
+            </div>
+        </div>
+
+        <!-- Settings Section -->
+        <div class="nav-section">
+            <div class="nav-section-title"><i class="bi bi-person"></i> Account</div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="settings">
+                    <i class="bi bi-gear"></i>
+                    <span>Settings</span>
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="about">
+                    <i class="bi bi-info-circle"></i>
+                    <span>About</span>
+                </NavLink>
+            </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="support">
+                    <i class="bi bi-question-circle"></i>
+                    <span>Support</span>
+                </NavLink>
+            </div>
+        </div>
+    </nav>
+</div>
+
+@code {
+    private bool collapseNavMenu = true;
+    private string? userRole;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            userRole = await JS.InvokeAsync<string>("localStorage.getItem", "userRole");
+            StateHasChanged();
+        }
+    }
+
+    private string? navMenuCssClass => collapseNavMenu ? null : "show";
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+
+    async ValueTask IAsyncDisposable.DisposeAsync()
+    {
+        // Cleanup if needed
+        await ValueTask.CompletedTask;
+    }
+}
+

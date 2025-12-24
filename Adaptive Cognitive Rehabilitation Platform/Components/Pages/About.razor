@@ -1,0 +1,131 @@
+@page "/about"
+@rendermode InteractiveServer
+
+<PageTitle>About NeuroPath</PageTitle>
+
+<main class="about-page">
+    <section class="page-hero">
+        <div class="page-hero-content">
+            <h1>About NeuroPath</h1>
+            <p>Supporting Your Cognitive Recovery Journey</p>
+        </div>
+    </section>
+
+    <div class="about-container">
+        <section class="section">
+            <h2 class="section-title"><i class="bi bi-star"></i> Our Mission</h2>
+            <p>NeuroPath combines cutting-edge technology with therapeutic design for personalized cognitive rehabilitation.</p>
+        </section>
+
+        <section class="section">
+            <h2 class="section-title"><i class="bi bi-heart"></i> What We Offer</h2>
+            <div class="grid grid-3">
+                <div class="card">
+                    <i class="bi bi-robot"></i>
+                    <h3>AI-Powered</h3>
+                    <p>Real-time Phi-4 AI difficulty adjustment.</p>
+                </div>
+                <div class="card">
+                    <i class="bi bi-graph-up"></i>
+                    <h3>Progress Tracking</h3>
+                    <p>Comprehensive analytics and metrics.</p>
+                </div>
+                <div class="card">
+                    <i class="bi bi-shield-lock"></i>
+                    <h3>Privacy First</h3>
+                    <p>Local processing, data stays private.</p>
+                </div>
+            </div>
+        </section>
+    </div>
+</main>
+
+<style>
+    .about-page {
+        background-color: var(--bg-primary);
+    }
+
+    .page-hero {
+        background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+        color: white;
+        padding: 4rem 2rem;
+        margin-bottom: 3rem;
+        border-radius: 0 0 var(--radius-2xl) var(--radius-2xl);
+    }
+
+    .page-hero-content {
+        max-width: 1200px;
+        margin: 0 auto;
+        text-align: center;
+    }
+
+    .page-hero h1 {
+        font-size: 3rem;
+        margin-bottom: 0.5rem;
+        font-weight: 800;
+    }
+
+    .about-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 2rem;
+    }
+
+    .section {
+        margin-bottom: 3rem;
+    }
+
+    .section-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 1.75rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .section-title i {
+        color: var(--primary);
+    }
+
+    .grid {
+        display: grid;
+        gap: 2rem;
+    }
+
+    .grid-3 {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--gray-200);
+        border-radius: var(--radius-lg);
+        padding: var(--spacing-2xl);
+        text-align: center;
+    }
+
+    .card i {
+        font-size: 2.5rem;
+        color: var(--primary);
+        margin-bottom: 1rem;
+    }
+
+    .card h3 {
+        margin-bottom: 0.5rem;
+        color: var(--dark);
+    }
+
+    @@media (max-width: 768px) {
+        .grid-3 {
+            grid-template-columns: 1fr;
+        }
+
+        .page-hero h1 {
+            font-size: 2rem;
+        }
+
+        .about-container {
+            padding: 0 1rem;
+        }
+    }
+</style>

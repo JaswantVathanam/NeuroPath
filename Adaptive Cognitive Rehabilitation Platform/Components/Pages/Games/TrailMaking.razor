@@ -1,0 +1,1088 @@
+@page "/games/trail-making"
+@using Microsoft.AspNetCore.Components.Web
+@using Adaptive_Cognitive_Rehabilitation_Platform.Components
+@using AdaptiveCognitiveRehabilitationPlatform.Services
+@using NeuroPath.Models
+@using AdaptiveCognitiveRehabilitationPlatform.Services.GameAnalytics
+@inject ILogger<TrailMaking> Logger
+@inject GameStatisticsService StatsService
+@inject GameAiAnalysisService AiService
+@inject IGameSessionRepository SessionRepository
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Trail Making - NeuroPath</PageTitle>
+
+<div class="tm-container">
+    @if (!gameStarted)
+    {
+        <!-- Level Selection Screen -->
+        <div class="tm-selection">
+            <div class="tm-header">
+                <h1><i class="bi bi-bezier2"></i> Trail Making</h1>
+                <p>Connect the dots in sequence to test processing speed and attention!</p>
+            </div>
+
+            <div class="tm-mode-select">
+                <h3>Select Mode</h3>
+                <div class="tm-modes">
+                    <button class="tm-mode-btn @(selectedMode == "numbers" ? "active" : "")" 
+                            @onclick='() => SelectMode("numbers")'>
+                        <i class="bi bi-123"></i>
+                        <strong>Numbers Only</strong>
+                        <small>1 → 2 → 3 → 4...</small>
+                    </button>
+                    <button class="tm-mode-btn @(selectedMode == "letters" ? "active" : "")" 
+                            @onclick='() => SelectMode("letters")'>
+                        <i class="bi bi-alphabet"></i>
+                        <strong>Letters Only</strong>
+                        <small>A → B → C → D...</small>
+                    </button>
+                    <button class="tm-mode-btn @(selectedMode == "alternating" ? "active" : "")" 
+                            @onclick='() => SelectMode("alternating")'>
+                        <i class="bi bi-shuffle"></i>
+                        <strong>Alternating</strong>
+                        <small>1 → A → 2 → B...</small>
+                    </button>
+                </div>
+            </div>
+
+            <div class="tm-levels">
+                <h3>Select Difficulty</h3>
+                <div class="tm-level-buttons">
+                    <button class="tm-level-btn @(selectedLevel == 1 ? "active" : "")" 
+                            @onclick="() => SelectLevel(1)">
+                        <i class="bi bi-flower2"></i>
+                        <strong>Easy</strong>
+                        <small>8 nodes</small>
+                    </button>
+                    <button class="tm-level-btn @(selectedLevel == 2 ? "active" : "")" 
+                            @onclick="() => SelectLevel(2)">
+                        <i class="bi bi-tree-fill"></i>
+                        <strong>Medium</strong>
+                        <small>12 nodes</small>
+                    </button>
+                    <button class="tm-level-btn @(selectedLevel == 3 ? "active" : "")" 
+                            @onclick="() => SelectLevel(3)">
+                        <i class="bi bi-fire"></i>
+                        <strong>Hard</strong>
+                        <small>16 nodes</small>
+                    </button>
+                </div>
+            </div>
+
+            <button class="tm-start-btn" 
+                    @onclick="StartGame"
+                    disabled="@(selectedLevel == 0 || string.IsNullOrEmpty(selectedMode))">
+                <i class="bi bi-play-fill"></i> START GAME
+            </button>
+        </div>
+    }
+    else if (gameStarted && !gameEnded && !aiAnalyzing)
+    {
+        <!-- Game Board -->
+        <div class="tm-game">
+            <div class="tm-info">
+                <div class="tm-stat">
+                    <span class="tm-label">Progress</span>
+                    <span class="tm-value">@currentIndex / @totalNodes</span>
+                </div>
+                <div class="tm-stat">
+                    <span class="tm-label">Errors</span>
+                    <span class="tm-value error">@errors</span>
+                </div>
+                <div class="tm-stat">
+                    <span class="tm-label">Time</span>
+                    <span class="tm-value">@elapsedSeconds<small>s</small></span>
+                </div>
+                <div class="tm-stat">
+                    <span class="tm-label">Next</span>
+                    <span class="tm-value highlight">@GetNextTarget()</span>
+                </div>
+            </div>
+
+            <div class="tm-board" @ref="boardRef">
+                <!-- Draw lines connecting visited nodes -->
+                <svg class="tm-lines" viewBox="0 0 600 500">
+                    @for (int i = 0; i < visitedNodes.Count - 1; i++)
+                    {
+                        var from = nodes[visitedNodes[i]];
+                        var to = nodes[visitedNodes[i + 1]];
+                        <line x1="@from.X" y1="@from.Y" x2="@to.X" y2="@to.Y" 
+                              stroke="#667eea" stroke-width="3" stroke-linecap="round"/>
+                    }
+                    @if (visitedNodes.Count > 0 && currentIndex < totalNodes)
+                    {
+                        var lastNode = nodes[visitedNodes.Last()];
+                        <circle cx="@lastNode.X" cy="@lastNode.Y" r="8" fill="#667eea" class="pulse-dot"/>
+                    }
+                </svg>
+
+                <!-- Render nodes -->
+                @foreach (var node in nodes)
+                {
+                    <button class="tm-node @(node.IsVisited ? "visited" : "") @(node.IsError ? "error" : "") @(node.Index == currentIndex ? "next" : "")"
+                            style="left: @(node.X - 25)px; top: @(node.Y - 25)px;"
+                            @onclick="() => ClickNode(node)"
+                            disabled="@node.IsVisited">
+                        <span>@node.Label</span>
+                    </button>
+                }
+            </div>
+
+            <div class="tm-hint">
+                <i class="bi bi-lightbulb"></i>
+                @if (selectedMode == "alternating")
+                {
+                    <span>Connect: 1 → A → 2 → B → 3 → C...</span>
+                }
+                else if (selectedMode == "numbers")
+                {
+                    <span>Connect numbers in order: 1 → 2 → 3 → 4...</span>
+                }
+                else
+                {
+                    <span>Connect letters in order: A → B → C → D...</span>
+                }
+            </div>
+        </div>
+    }
+    else if (aiAnalyzing)
+    {
+        <!-- AI Analysis Loading -->
+        <div class="tm-analyzing">
+            <div class="tm-spinner"></div>
+            <h3>AI is analyzing your performance...</h3>
+            <p>Generating personalized feedback and recommendations</p>
+        </div>
+    }
+    else if (gameEnded)
+    {
+        <!-- Results Screen -->
+        <div class="tm-results">
+            <div class="tm-results-header">
+                <div class="tm-trophy">
+                    @if ((_gameSessionResult?.OverallScore ?? 0) >= 80)
+                    {
+                        <i class="bi bi-trophy-fill gold"></i>
+                    }
+                    else if ((_gameSessionResult?.OverallScore ?? 0) >= 60)
+                    {
+                        <i class="bi bi-trophy-fill silver"></i>
+                    }
+                    else
+                    {
+                        <i class="bi bi-trophy-fill bronze"></i>
+                    }
+                </div>
+                <h2>Trail Completed!</h2>
+                <p class="tm-score-label">Your Score</p>
+                <div class="tm-big-score">@((_gameSessionResult?.OverallScore ?? 0).ToString("0"))</div>
+            </div>
+
+            <div class="tm-stats-grid">
+                <div class="tm-stat-card">
+                    <i class="bi bi-clock"></i>
+                    <span class="value">@elapsedSeconds s</span>
+                    <span class="label">Time</span>
+                </div>
+                <div class="tm-stat-card">
+                    <i class="bi bi-x-circle"></i>
+                    <span class="value">@errors</span>
+                    <span class="label">Errors</span>
+                </div>
+                <div class="tm-stat-card">
+                    <i class="bi bi-speedometer2"></i>
+                    <span class="value">@((totalNodes > 0 ? (elapsedSeconds / (double)totalNodes) : 0).ToString("0.0"))s</span>
+                    <span class="label">Avg/Node</span>
+                </div>
+                <div class="tm-stat-card">
+                    <i class="bi bi-percent"></i>
+                    <span class="value">@accuracy.ToString("0")%</span>
+                    <span class="label">Accuracy</span>
+                </div>
+            </div>
+
+            @if (_aiResponse != null)
+            {
+                <div class="tm-ai-feedback">
+                    <div class="ai-header">
+                        <i class="bi bi-robot"></i>
+                        <span>AI Feedback</span>
+                    </div>
+                    <div class="ai-message encouragement">
+                        <i class="bi bi-emoji-smile"></i>
+                        <p>@_aiResponse.Encouragement</p>
+                    </div>
+                    @if (!string.IsNullOrEmpty(_aiResponse.FunMessage))
+                    {
+                        <div class="ai-message fun">
+                            <i class="bi bi-stars"></i>
+                            <p>@_aiResponse.FunMessage</p>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(_aiResponse.EffortNote))
+                    {
+                        <div class="ai-message tip">
+                            <i class="bi bi-lightbulb"></i>
+                            <p>@_aiResponse.EffortNote</p>
+                        </div>
+                    }
+                </div>
+            }
+
+            <div class="tm-actions">
+                <button class="tm-btn-primary" @onclick="StartGame">
+                    <i class="bi bi-arrow-clockwise"></i> Play Again
+                </button>
+                <button class="tm-btn-secondary" @onclick="GoToGames">
+                    <i class="bi bi-grid-3x3-gap"></i> All Games
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .tm-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+    }
+
+    /* Selection Screen */
+    .tm-selection {
+        background: white;
+        border-radius: 24px;
+        padding: 3rem;
+        max-width: 700px;
+        width: 100%;
+        text-align: center;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+
+    .tm-header h1 {
+        font-size: 2.5rem;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 0.5rem;
+    }
+
+    .tm-header p {
+        color: #6b7280;
+        font-size: 1.1rem;
+    }
+
+    .tm-mode-select, .tm-levels {
+        margin: 2rem 0;
+    }
+
+    .tm-mode-select h3, .tm-levels h3 {
+        font-size: 1.1rem;
+        color: #374151;
+        margin-bottom: 1rem;
+    }
+
+    .tm-modes, .tm-level-buttons {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .tm-mode-btn, .tm-level-btn {
+        background: #f9fafb;
+        border: 2px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 1.5rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 140px;
+    }
+
+    .tm-mode-btn:hover, .tm-level-btn:hover {
+        border-color: #667eea;
+        transform: translateY(-2px);
+    }
+
+    .tm-mode-btn.active, .tm-level-btn.active {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        border-color: transparent;
+        color: white;
+    }
+
+    .tm-mode-btn i, .tm-level-btn i {
+        font-size: 2rem;
+    }
+
+    .tm-mode-btn small, .tm-level-btn small {
+        font-size: 0.8rem;
+        opacity: 0.8;
+    }
+
+    .tm-start-btn {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        padding: 1rem 3rem;
+        font-size: 1.2rem;
+        font-weight: 600;
+        border-radius: 50px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-top: 1rem;
+    }
+
+    .tm-start-btn:hover:not(:disabled) {
+        transform: scale(1.05);
+        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+    }
+
+    .tm-start-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* Game Board */
+    .tm-game {
+        background: white;
+        border-radius: 24px;
+        padding: 2rem;
+        max-width: 700px;
+        width: 100%;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+
+    .tm-info {
+        display: flex;
+        justify-content: space-around;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid #f3f4f6;
+    }
+
+    .tm-stat {
+        text-align: center;
+    }
+
+    .tm-label {
+        display: block;
+        font-size: 0.85rem;
+        color: #6b7280;
+        margin-bottom: 0.25rem;
+    }
+
+    .tm-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .tm-value.error {
+        color: #ef4444;
+    }
+
+    .tm-value.highlight {
+        color: #667eea;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .tm-board {
+        position: relative;
+        width: 100%;
+        height: 500px;
+        background: #f9fafb;
+        border-radius: 16px;
+        overflow: hidden;
+    }
+
+    .tm-lines {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+    }
+
+    .tm-node {
+        position: absolute;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: white;
+        border: 3px solid #d1d5db;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #374151;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        z-index: 10;
+    }
+
+    .tm-node:hover:not(:disabled) {
+        transform: scale(1.15);
+        border-color: #667eea;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+
+    .tm-node.next {
+        border-color: #667eea;
+        background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+        animation: pulse 1.5s infinite;
+    }
+
+    .tm-node.visited {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        border-color: transparent;
+        color: white;
+        cursor: default;
+    }
+
+    .tm-node.error {
+        animation: shake 0.5s ease;
+        border-color: #ef4444;
+        background: #fef2f2;
+    }
+
+    @@keyframes pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.4); }
+        50% { box-shadow: 0 0 0 10px rgba(102, 126, 234, 0); }
+    }
+
+    @@keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-5px); }
+        75% { transform: translateX(5px); }
+    }
+
+    .pulse-dot {
+        animation: pulse-dot 1s infinite;
+    }
+
+    @@keyframes pulse-dot {
+        0%, 100% { opacity: 1; r: 8; }
+        50% { opacity: 0.5; r: 12; }
+    }
+
+    .tm-hint {
+        margin-top: 1rem;
+        padding: 1rem;
+        background: #f0fdf4;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        color: #166534;
+    }
+
+    .tm-hint i {
+        font-size: 1.25rem;
+    }
+
+    /* Analyzing */
+    .tm-analyzing {
+        background: white;
+        border-radius: 24px;
+        padding: 4rem;
+        text-align: center;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+
+    .tm-spinner {
+        width: 60px;
+        height: 60px;
+        border: 4px solid #e5e7eb;
+        border-top-color: #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1.5rem;
+    }
+
+    @@keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    /* Results */
+    .tm-results {
+        background: white;
+        border-radius: 24px;
+        padding: 3rem;
+        max-width: 600px;
+        width: 100%;
+        text-align: center;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+
+    .tm-results-header {
+        margin-bottom: 2rem;
+    }
+
+    .tm-trophy i {
+        font-size: 4rem;
+    }
+
+    .tm-trophy i.gold { color: #fbbf24; }
+    .tm-trophy i.silver { color: #9ca3af; }
+    .tm-trophy i.bronze { color: #d97706; }
+
+    .tm-results-header h2 {
+        font-size: 2rem;
+        color: #1f2937;
+        margin: 1rem 0 0.5rem;
+    }
+
+    .tm-score-label {
+        color: #6b7280;
+        font-size: 1rem;
+    }
+
+    .tm-big-score {
+        font-size: 4rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .tm-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .tm-stat-card {
+        background: #f9fafb;
+        border-radius: 12px;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .tm-stat-card i {
+        font-size: 1.5rem;
+        color: #667eea;
+    }
+
+    .tm-stat-card .value {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .tm-stat-card .label {
+        font-size: 0.75rem;
+        color: #6b7280;
+    }
+
+    /* AI Feedback */
+    .tm-ai-feedback {
+        background: #f9fafb;
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        text-align: left;
+    }
+
+    .ai-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+        color: #667eea;
+        margin-bottom: 1rem;
+    }
+
+    .ai-message {
+        display: flex;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        border-radius: 8px;
+        margin-bottom: 0.5rem;
+    }
+
+    .ai-message.encouragement {
+        background: #ecfdf5;
+        color: #065f46;
+    }
+
+    .ai-message.fun {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .ai-message.tip {
+        background: #eff6ff;
+        color: #1e40af;
+    }
+
+    .ai-message p {
+        margin: 0;
+        flex: 1;
+    }
+
+    .tm-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+    }
+
+    .tm-btn-primary {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        padding: 1rem 2rem;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .tm-btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+    }
+
+    .tm-btn-secondary {
+        background: white;
+        color: #667eea;
+        border: 2px solid #667eea;
+        padding: 1rem 2rem;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .tm-btn-secondary:hover {
+        background: #f5f5ff;
+    }
+
+    @@media (max-width: 640px) {
+        .tm-stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        
+        .tm-modes, .tm-level-buttons {
+            flex-direction: column;
+        }
+        
+        .tm-mode-btn, .tm-level-btn {
+            width: 100%;
+        }
+    }
+</style>
+
+@code {
+    private class TrailNode
+    {
+        public int Index { get; set; }
+        public string Label { get; set; } = "";
+        public double X { get; set; }
+        public double Y { get; set; }
+        public bool IsVisited { get; set; }
+        public bool IsError { get; set; }
+    }
+
+    private ElementReference boardRef;
+    private string selectedMode = "";
+    private int selectedLevel = 0;
+    private bool gameStarted = false;
+    private bool gameEnded = false;
+    private bool aiAnalyzing = false;
+    private int currentIndex = 0;
+    private int totalNodes = 0;
+    private int errors = 0;
+    private double accuracy = 100;
+    private int elapsedSeconds = 0;
+    private DateTime gameStartTime;
+    private System.Threading.Timer? timerHandle;
+
+    private List<TrailNode> nodes = new();
+    private List<int> visitedNodes = new();
+    private GameSessionResult? _gameSessionResult;
+    private GameAiAnalysisService.AiAnalysisResponse? _aiResponse;
+
+    // User context - will be loaded from localStorage
+    private int currentUserId = 0;
+    private string currentUsername = "";
+
+    private static readonly string[] Letters = { "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P" };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadUserContext();
+        }
+    }
+
+    private async Task LoadUserContext()
+    {
+        try
+        {
+            var userIdStr = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "userId");
+            var username = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "username");
+            
+            if (!string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out var id))
+            {
+                currentUserId = id;
+            }
+            currentUsername = username ?? "Player";
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning($"Could not load user context: {ex.Message}");
+            currentUserId = 1;
+            currentUsername = "Player";
+        }
+    }
+
+    private void SelectMode(string mode)
+    {
+        selectedMode = mode;
+        StateHasChanged();
+    }
+
+    private void SelectLevel(int level)
+    {
+        selectedLevel = level;
+        StateHasChanged();
+    }
+
+    private void StartGame()
+    {
+        gameStarted = true;
+        gameEnded = false;
+        aiAnalyzing = false;
+        currentIndex = 0;
+        errors = 0;
+        accuracy = 100;
+        elapsedSeconds = 0;
+        visitedNodes.Clear();
+        nodes.Clear();
+
+        totalNodes = selectedLevel switch
+        {
+            1 => 8,
+            2 => 12,
+            3 => 16,
+            _ => 8
+        };
+
+        GenerateNodes();
+        gameStartTime = DateTime.Now;
+
+        // Start timer
+        timerHandle = new System.Threading.Timer(_ =>
+        {
+            elapsedSeconds++;
+            InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+
+        StateHasChanged();
+    }
+
+    private void GenerateNodes()
+    {
+        var random = new Random();
+        var positions = new List<(double X, double Y)>();
+
+        // Generate random positions with minimum distance between nodes
+        int attempts = 0;
+        while (positions.Count < totalNodes && attempts < 1000)
+        {
+            double x = random.Next(50, 550);
+            double y = random.Next(50, 450);
+
+            bool tooClose = positions.Any(p => 
+                Math.Sqrt(Math.Pow(p.X - x, 2) + Math.Pow(p.Y - y, 2)) < 70);
+
+            if (!tooClose)
+            {
+                positions.Add((x, y));
+            }
+            attempts++;
+        }
+
+        // Create nodes with labels based on mode
+        for (int i = 0; i < totalNodes; i++)
+        {
+            string label = selectedMode switch
+            {
+                "numbers" => (i + 1).ToString(),
+                "letters" => Letters[i],
+                "alternating" => i % 2 == 0 ? ((i / 2) + 1).ToString() : Letters[i / 2],
+                _ => (i + 1).ToString()
+            };
+
+            nodes.Add(new TrailNode
+            {
+                Index = i,
+                Label = label,
+                X = positions[i].X,
+                Y = positions[i].Y,
+                IsVisited = false,
+                IsError = false
+            });
+        }
+    }
+
+    private string GetNextTarget()
+    {
+        if (currentIndex >= totalNodes) return "Done!";
+        return nodes.FirstOrDefault(n => n.Index == currentIndex)?.Label ?? "?";
+    }
+
+    private async Task ClickNode(TrailNode node)
+    {
+        if (node.IsVisited) return;
+
+        // Clear any previous error state
+        foreach (var n in nodes)
+        {
+            n.IsError = false;
+        }
+
+        if (node.Index == currentIndex)
+        {
+            // Correct node clicked
+            node.IsVisited = true;
+            visitedNodes.Add(node.Index);
+            currentIndex++;
+
+            if (currentIndex >= totalNodes)
+            {
+                // Game completed
+                await EndGame();
+            }
+        }
+        else
+        {
+            // Wrong node clicked
+            errors++;
+            node.IsError = true;
+            
+            // Calculate accuracy
+            int totalClicks = visitedNodes.Count + errors;
+            accuracy = totalClicks > 0 ? (visitedNodes.Count * 100.0 / totalClicks) : 100;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task EndGame()
+    {
+        gameEnded = true;
+        timerHandle?.Dispose();
+
+        // Calculate final accuracy
+        int totalClicks = totalNodes + errors;
+        accuracy = totalClicks > 0 ? (totalNodes * 100.0 / totalClicks) : 100;
+
+        // Calculate score (based on time, errors, and completion)
+        double timeScore = Math.Max(0, 100 - (elapsedSeconds / (totalNodes * 0.5)));
+        double errorPenalty = errors * 5;
+        double finalScore = Math.Max(0, Math.Min(100, (timeScore + accuracy) / 2 - errorPenalty));
+
+        _gameSessionResult = StatsService.CalculateStatistics(
+            "Trail Making",
+            selectedLevel,
+            totalNodes + errors,  // total attempts
+            totalNodes,  // correct
+            totalNodes,  // total required
+            errors,
+            elapsedSeconds,
+            gameStartTime,
+            DateTime.Now
+        );
+
+        // Override with our calculated score
+        _gameSessionResult.OverallScore = finalScore;
+
+        Logger?.LogInformation($"Trail Making completed. Score: {finalScore:F1}, Errors: {errors}, Time: {elapsedSeconds}s");
+
+        await SaveGameSessionAsync();
+        await AnalyzeGameWithAI();
+    }
+
+    private async Task SaveGameSessionAsync()
+    {
+        try
+        {
+            var session = new GameSession
+            {
+                UserId = currentUserId,
+                ProfileId = currentUserId,
+                GameType = "TrailMaking",
+                Difficulty = selectedLevel,
+                Status = "Completed",
+                TimeStarted = gameStartTime,
+                TimeCompleted = DateTime.UtcNow,
+                TotalSeconds = elapsedSeconds,
+                TotalMoves = totalNodes + errors,
+                CorrectMatches = totalNodes,
+                Accuracy = (decimal)accuracy,
+                PerformanceScore = (int)(_gameSessionResult?.OverallScore ?? 0),
+                EfficiencyScore = (decimal)accuracy,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                Notes = $"Trail Making - {selectedMode} Mode - Level {selectedLevel} - {errors} errors in {elapsedSeconds}s"
+            };
+
+            await SessionRepository.CreateSessionAsync(session);
+
+            // Also save via HTTP API
+            try
+            {
+                var request = new
+                {
+                    UserId = currentUserId,
+                    Username = currentUsername,
+                    GameType = "TrailMaking",
+                    GameMode = selectedMode,
+                    DifficultyLevel = selectedLevel,
+                    Score = (int)(_gameSessionResult?.OverallScore ?? 0),
+                    Accuracy = accuracy,
+                    TotalMoves = totalNodes + errors,
+                    CorrectMoves = totalNodes,
+                    ErrorCount = errors,
+                    Duration = elapsedSeconds,
+                    CompletedSuccessfully = true,
+                    StartTime = gameStartTime,
+                    EndTime = DateTime.UtcNow
+                };
+
+                var apiUrl = $"{NavigationManager.BaseUri}api/game/save-session";
+                await Http.PostAsJsonAsync(apiUrl, request);
+                Logger?.LogInformation($"Trail Making session saved via API for user {currentUserId}");
+            }
+            catch (Exception apiEx)
+            {
+                Logger?.LogWarning($"Failed to save via API: {apiEx.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"Failed to save game session: {ex.Message}");
+        }
+    }
+
+    private async Task AnalyzeGameWithAI()
+    {
+        aiAnalyzing = true;
+        StateHasChanged();
+
+        try
+        {
+            _aiResponse = await AiService.AnalyzeGamePerformanceAsync(
+                _gameSessionResult ?? new GameSessionResult(),
+                currentUsername,
+                0
+            );
+
+            Logger?.LogInformation($"AI Analysis complete for Trail Making");
+
+            // Autosave with AI feedback
+            await AutosaveGameResultAsync(_aiResponse);
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"AI Analysis failed: {ex.Message}");
+            _aiResponse = new GameAiAnalysisService.AiAnalysisResponse
+            {
+                Encouragement = "Great job completing the trail!",
+                FunMessage = selectedMode == "alternating" 
+                    ? "Alternating between numbers and letters is tricky - you did amazing!" 
+                    : "You're getting faster at connecting the dots!",
+                EffortNote = errors == 0 
+                    ? "Perfect run with no errors! Your focus is incredible!" 
+                    : $"Only {errors} error(s) - keep practicing to improve!",
+                PerformanceScore = _gameSessionResult?.OverallScore ?? 50,
+                NextDifficultyLevel = Math.Min(3, selectedLevel + 1),
+                Confidence = 0.7
+            };
+
+            await AutosaveGameResultAsync(_aiResponse);
+        }
+
+        aiAnalyzing = false;
+        StateHasChanged();
+    }
+
+    private async Task AutosaveGameResultAsync(GameAiAnalysisService.AiAnalysisResponse? aiResponse)
+    {
+        try
+        {
+            var autosaveRequest = new
+            {
+                UserId = currentUserId,
+                Username = currentUsername,
+                GameType = "TrailMaking",
+                GameMode = selectedMode,
+                DifficultyLevel = selectedLevel,
+                Score = (int)(_gameSessionResult?.OverallScore ?? 0),
+                Accuracy = accuracy,
+                Duration = elapsedSeconds,
+                TotalMoves = totalNodes + errors,
+                CorrectMoves = totalNodes,
+                ErrorCount = errors,
+                Encouragement = aiResponse?.Encouragement ?? "",
+                FunMessage = aiResponse?.FunMessage ?? "",
+                EffortNote = aiResponse?.EffortNote ?? "",
+                AiPerformanceScore = aiResponse?.PerformanceScore ?? 0,
+                AiNextDifficultyLevel = aiResponse?.NextDifficultyLevel ?? selectedLevel,
+                AiConfidence = aiResponse?.Confidence ?? 0,
+                Timestamp = DateTime.UtcNow
+            };
+
+            var autosaveUrl = $"{NavigationManager.BaseUri}api/json-stats/save";
+            await Http.PostAsJsonAsync(autosaveUrl, autosaveRequest);
+            Logger?.LogInformation("Trail Making result autosaved with AI feedback");
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogWarning($"Failed to autosave result: {ex.Message}");
+        }
+    }
+
+    private void GoToGames()
+    {
+        NavigationManager.NavigateTo("/games");
+    }
+
+    public void Dispose()
+    {
+        timerHandle?.Dispose();
+    }
+}

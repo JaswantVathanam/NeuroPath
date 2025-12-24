@@ -1,0 +1,1137 @@
+@page "/games/pattern-copy"
+@using Microsoft.AspNetCore.Components.Web
+@using Adaptive_Cognitive_Rehabilitation_Platform.Components
+@using AdaptiveCognitiveRehabilitationPlatform.Services
+@using NeuroPath.Models
+@using AdaptiveCognitiveRehabilitationPlatform.Services.GameAnalytics
+@inject ILogger<PatternCopy> Logger
+@inject GameStatisticsService StatsService
+@inject GameAiAnalysisService AiService
+@inject IGameSessionRepository SessionRepository
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Pattern Copy</PageTitle>
+
+<div class="pc-container">
+    @if (!gameStarted)
+    {
+        <!-- Level Selection Screen -->
+        <div class="pc-selection">
+            <div class="pc-header">
+                <h1><i class="bi bi-grid-3x3"></i> Pattern Copy</h1>
+                <p>Memorize the pattern and reproduce it!</p>
+            </div>
+
+            <div class="pc-levels">
+                <button class="pc-level-btn @(selectedLevel == 1 ? "active" : "")" 
+                        @onclick="() => HandleSelectLevel(1)">
+                    <i class="bi bi-flower2"></i>
+                    <strong>Easy</strong>
+                    <small>3×3 Grid</small>
+                </button>
+                <button class="pc-level-btn @(selectedLevel == 2 ? "active" : "")" 
+                        @onclick="() => HandleSelectLevel(2)">
+                    <i class="bi bi-tree-fill"></i>
+                    <strong>Medium</strong>
+                    <small>4×4 Grid</small>
+                </button>
+                <button class="pc-level-btn @(selectedLevel == 3 ? "active" : "")" 
+                        @onclick="() => HandleSelectLevel(3)">
+                    <i class="bi bi-fire"></i>
+                    <strong>Hard</strong>
+                    <small>5×5 Grid</small>
+                </button>
+            </div>
+
+            <button class="pc-start-btn" 
+                    @onclick="HandleStartGame"
+                    disabled="@(selectedLevel == 0)">
+                <i class="bi bi-play-fill"></i> START GAME
+            </button>
+        </div>
+    }
+    else if (gameStarted && !gameEnded && !aiAnalyzing)
+    {
+        <!-- Game Board -->
+        <div class="pc-game">
+            <div class="pc-info">
+                <div class="pc-stat">
+                    <span class="pc-label">Round</span>
+                    <span class="pc-value">@currentRound/@totalRounds</span>
+                </div>
+                <div class="pc-stat">
+                    <span class="pc-label">Score</span>
+                    <span class="pc-value">@correctPatterns/@(currentRound - 1)</span>
+                </div>
+                <div class="pc-stat">
+                    <span class="pc-label">Time</span>
+                    <span class="pc-value">@elapsedSeconds<small>s</small></span>
+                </div>
+            </div>
+
+            @if (showingPattern)
+            {
+                <!-- Pattern Display Phase -->
+                <div class="pc-phase-indicator memorize">
+                    <i class="bi bi-eye-fill"></i>
+                    <span>MEMORIZE THE PATTERN!</span>
+                    <div class="pc-countdown">@patternCountdown</div>
+                </div>
+            }
+            else if (inputPhase)
+            {
+                <!-- Input Phase -->
+                <div class="pc-phase-indicator input">
+                    <i class="bi bi-pencil-fill"></i>
+                    <span>REPRODUCE THE PATTERN!</span>
+                </div>
+            }
+
+            <div class="pc-board" style="grid-template-columns: repeat(@gridSize, 1fr);">
+                @foreach (var cell in gridCells)
+                {
+                    <button class="pc-cell @(GetCellClass(cell))"
+                            @onclick="@(() => HandleCellClick(cell.Index))"
+                            disabled="@(!inputPhase)">
+                        @if (cell.IsHighlighted || (inputPhase && cell.IsSelected))
+                        {
+                            <i class="bi bi-star-fill"></i>
+                        }
+                    </button>
+                }
+            </div>
+
+            @if (inputPhase)
+            {
+                <div class="pc-input-info">
+                    <p>Select @patternSize cells to match the pattern</p>
+                    <p class="pc-selected-count">Selected: @gridCells.Count(c => c.IsSelected)/@patternSize</p>
+                </div>
+
+                <button class="pc-submit-btn" 
+                        @onclick="HandleSubmitPattern"
+                        disabled="@(gridCells.Count(c => c.IsSelected) != patternSize)">
+                    <i class="bi bi-check-lg"></i> Submit Pattern
+                </button>
+            }
+
+            @if (showFeedback)
+            {
+                <div class="pc-feedback @(lastRoundCorrect ? "correct" : "incorrect")">
+                    @if (lastRoundCorrect)
+                    {
+                        <i class="bi bi-check-circle-fill"></i>
+                        <span>Correct! Great memory! 🎉</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-x-circle-fill"></i>
+                        <span>Not quite! Keep trying! 💪</span>
+                    }
+                </div>
+            }
+        </div>
+    }
+    else if (aiAnalyzing)
+    {
+        <!-- AI Analysis Loading -->
+        <div class="pc-analyzing">
+            <div class="pc-spinner"></div>
+            <h3>AI is analyzing your performance...</h3>
+            <p>Generating personalized feedback and recommendations</p>
+        </div>
+    }
+    else if (gameEnded && _aiResponse != null)
+    {
+        <!-- AI Results Screen -->
+        <div class="pc-results">
+            <div class="pc-results-header">
+                <h2><i class="bi bi-trophy-fill"></i> Game Complete!</h2>
+            </div>
+
+            <div class="pc-score-display">
+                <div class="pc-score-circle">
+                    <span class="pc-score-value">@_aiResponse.PerformanceScore.ToString("F0")</span>
+                    <span class="pc-score-label">Score</span>
+                </div>
+            </div>
+
+            <div class="pc-stats-summary">
+                <div class="pc-stat-card">
+                    <i class="bi bi-bullseye"></i>
+                    <div>
+                        <div class="pc-stat-title">Accuracy</div>
+                        <div class="pc-stat-detail">@correctPatterns/@totalRounds patterns</div>
+                    </div>
+                </div>
+                <div class="pc-stat-card">
+                    <i class="bi bi-hourglass"></i>
+                    <div>
+                        <div class="pc-stat-title">Time</div>
+                        <div class="pc-stat-detail">@elapsedSeconds seconds</div>
+                    </div>
+                </div>
+                <div class="pc-stat-card">
+                    <i class="bi bi-percent"></i>
+                    <div>
+                        <div class="pc-stat-title">Pattern Recall</div>
+                        <div class="pc-stat-detail">@((totalRounds > 0 ? (correctPatterns * 100.0 / totalRounds) : 0).ToString("F0"))%</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pc-ai-feedback">
+                <div class="pc-feedback-section">
+                    <h3><i class="bi bi-heart-fill"></i> Encouragement</h3>
+                    <p>@_aiResponse.Encouragement</p>
+                </div>
+
+                <div class="pc-feedback-section">
+                    <h3><i class="bi bi-chat-dots-fill"></i> Fun Message</h3>
+                    <p>@_aiResponse.FunMessage</p>
+                </div>
+
+                <div class="pc-feedback-section">
+                    <h3><i class="bi bi-bar-chart-fill"></i> Your Effort</h3>
+                    <p>@_aiResponse.EffortNote</p>
+                </div>
+
+                @if (_aiResponse.NextDifficultyLevel > selectedLevel)
+                {
+                    <div class="pc-feedback-section pc-next-level">
+                        <h3><i class="bi bi-arrow-up-circle-fill"></i> Ready for Next Level?</h3>
+                        <p>The AI recommends trying <strong>Level @_aiResponse.NextDifficultyLevel</strong> next!</p>
+                        <p class="pc-confidence">AI Confidence: @((_aiResponse.Confidence * 100).ToString("F0"))%</p>
+                    </div>
+                }
+            </div>
+
+            <div class="pc-actions">
+                <button class="pc-btn pc-btn-secondary" @onclick="HandleResetGame">
+                    <i class="bi bi-arrow-clockwise"></i> Play Again
+                </button>
+                <button class="pc-btn pc-btn-primary" @onclick="HandlePlayNextLevel">
+                    <i class="bi bi-play-fill"></i> Next Challenge
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .pc-container {
+        width: 100%;
+        max-width: 500px;
+        margin: 0 auto;
+        padding: 20px;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    /* Selection Screen */
+    .pc-selection {
+        text-align: center;
+    }
+
+    .pc-header {
+        margin-bottom: 30px;
+    }
+
+    .pc-header h1 {
+        font-size: 2rem;
+        color: #10b981;
+        margin: 0 0 10px 0;
+    }
+
+    .pc-header p {
+        color: #666;
+        font-size: 1rem;
+        margin: 0;
+    }
+
+    .pc-levels {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 15px;
+        margin-bottom: 25px;
+    }
+
+    .pc-level-btn {
+        padding: 20px 15px;
+        border: 2px solid #ddd;
+        border-radius: 12px;
+        background: white;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 0.9rem;
+    }
+
+    .pc-level-btn i {
+        font-size: 1.8rem;
+        display: block;
+        margin-bottom: 8px;
+        color: #10b981;
+    }
+
+    .pc-level-btn strong {
+        display: block;
+        margin: 8px 0 4px 0;
+    }
+
+    .pc-level-btn small {
+        display: block;
+        color: #999;
+        font-size: 0.8rem;
+    }
+
+    .pc-level-btn:hover {
+        border-color: #10b981;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+    }
+
+    .pc-level-btn.active {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border-color: #10b981;
+    }
+
+    .pc-level-btn.active i {
+        color: white;
+    }
+
+    .pc-start-btn {
+        width: 100%;
+        padding: 15px;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 1rem;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .pc-start-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+    }
+
+    .pc-start-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* Game Board */
+    .pc-game {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .pc-info {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        background: white;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .pc-stat {
+        text-align: center;
+    }
+
+    .pc-label {
+        display: block;
+        font-size: 0.75rem;
+        color: #999;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .pc-value {
+        display: block;
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #10b981;
+    }
+
+    .pc-phase-indicator {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 15px;
+        border-radius: 10px;
+        font-weight: bold;
+        font-size: 1.1rem;
+    }
+
+    .pc-phase-indicator.memorize {
+        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        color: white;
+    }
+
+    .pc-phase-indicator.input {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+    }
+
+    .pc-countdown {
+        background: white;
+        color: #f59e0b;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+    }
+
+    .pc-board {
+        display: grid;
+        gap: 8px;
+        background: white;
+        padding: 15px;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .pc-cell {
+        aspect-ratio: 1;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        background: #f9fafb;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+    }
+
+    .pc-cell:hover:not(:disabled) {
+        border-color: #10b981;
+        background: #ecfdf5;
+    }
+
+    .pc-cell.highlighted {
+        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        border-color: #f59e0b;
+        color: white;
+    }
+
+    .pc-cell.selected {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        border-color: #059669;
+        color: white;
+    }
+
+    .pc-cell.correct {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        border-color: #059669;
+        color: white;
+    }
+
+    .pc-cell.incorrect {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        border-color: #dc2626;
+        color: white;
+    }
+
+    .pc-cell:disabled {
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+
+    .pc-input-info {
+        text-align: center;
+        color: #666;
+    }
+
+    .pc-selected-count {
+        font-weight: bold;
+        color: #10b981;
+    }
+
+    .pc-submit-btn {
+        padding: 15px;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 1rem;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .pc-submit-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+    }
+
+    .pc-submit-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .pc-feedback {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 15px;
+        border-radius: 10px;
+        font-weight: bold;
+    }
+
+    .pc-feedback.correct {
+        background: #ecfdf5;
+        color: #059669;
+    }
+
+    .pc-feedback.incorrect {
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+    /* AI Analysis Loading */
+    .pc-analyzing {
+        text-align: center;
+        padding: 60px 20px;
+    }
+
+    .pc-spinner {
+        width: 60px;
+        height: 60px;
+        border: 4px solid #e5e7eb;
+        border-top: 4px solid #10b981;
+        border-radius: 50%;
+        margin: 0 auto 20px;
+    }
+
+    .pc-analyzing h3 {
+        color: #10b981;
+        margin-bottom: 10px;
+    }
+
+    .pc-analyzing p {
+        color: #666;
+    }
+
+    /* Results Screen */
+    .pc-results {
+        text-align: center;
+    }
+
+    .pc-results-header h2 {
+        font-size: 1.8rem;
+        color: #10b981;
+        margin-bottom: 20px;
+    }
+
+    .pc-score-display {
+        margin-bottom: 25px;
+    }
+
+    .pc-score-circle {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        color: white;
+        box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
+    }
+
+    .pc-score-value {
+        font-size: 2.5rem;
+        font-weight: bold;
+        line-height: 1;
+    }
+
+    .pc-score-label {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        opacity: 0.9;
+    }
+
+    .pc-stats-summary {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-bottom: 25px;
+    }
+
+    .pc-stat-card {
+        background: white;
+        padding: 15px 10px;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .pc-stat-card i {
+        font-size: 1.5rem;
+        color: #10b981;
+    }
+
+    .pc-stat-title {
+        font-size: 0.75rem;
+        color: #999;
+        text-transform: uppercase;
+    }
+
+    .pc-stat-detail {
+        font-weight: bold;
+        color: #333;
+    }
+
+    .pc-ai-feedback {
+        text-align: left;
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    }
+
+    .pc-feedback-section {
+        margin-bottom: 15px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    .pc-feedback-section:last-child {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: none;
+    }
+
+    .pc-feedback-section h3 {
+        font-size: 0.9rem;
+        color: #10b981;
+        margin: 0 0 8px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .pc-feedback-section p {
+        margin: 0;
+        color: #555;
+        line-height: 1.5;
+    }
+
+    .pc-next-level {
+        background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+        border-radius: 10px;
+        padding: 15px;
+        margin-top: 15px;
+    }
+
+    .pc-confidence {
+        font-size: 0.85rem;
+        color: #059669;
+        margin-top: 8px !important;
+    }
+
+    .pc-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+    }
+
+    .pc-btn {
+        padding: 15px;
+        border-radius: 10px;
+        font-size: 1rem;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .pc-btn:hover {
+        transform: translateY(-2px);
+    }
+
+    .pc-btn-primary {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border: none;
+    }
+
+    .pc-btn-primary:hover {
+        box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+    }
+
+    .pc-btn-secondary {
+        background: white;
+        color: #10b981;
+        border: 2px solid #10b981;
+    }
+
+    .pc-btn-secondary:hover {
+        background: #ecfdf5;
+    }
+</style>
+
+@code {
+    private class CellData
+    {
+        public int Index { get; set; }
+        public bool IsHighlighted { get; set; }
+        public bool IsSelected { get; set; }
+        public bool IsCorrect { get; set; }
+        public bool IsIncorrect { get; set; }
+    }
+
+    // Game state
+    private int selectedLevel = 0;
+    private bool gameStarted = false;
+    private bool gameEnded = false;
+    private bool aiAnalyzing = false;
+    private int gridSize = 3;
+    private int patternSize = 3;
+    private int totalRounds = 5;
+    private int currentRound = 1;
+    private int correctPatterns = 0;
+    private int totalAttempts = 0;
+
+    // Phase control
+    private bool showingPattern = false;
+    private bool inputPhase = false;
+    private bool showFeedback = false;
+    private bool lastRoundCorrect = false;
+    private int patternCountdown = 3;
+
+    // Timing
+    private DateTime gameStartTime;
+    private int elapsedSeconds = 0;
+    private System.Threading.Timer? timerHandle;
+
+    // Grid data
+    private List<CellData> gridCells = new();
+    private HashSet<int> currentPattern = new();
+
+    // AI Response
+    private GameSessionResult? _gameSessionResult;
+    private GameAiAnalysisService.AiAnalysisResponse? _aiResponse;
+
+    protected override void OnInitialized()
+    {
+        Logger.LogInformation("PatternCopy component initialized");
+    }
+
+    private void HandleSelectLevel(int level)
+    {
+        selectedLevel = level;
+        Logger?.LogInformation($"Level selected: {level}");
+        StateHasChanged();
+    }
+
+    private async Task HandleStartGame()
+    {
+        if (selectedLevel == 0) return;
+
+        gameStarted = true;
+        gameEnded = false;
+        aiAnalyzing = false;
+        currentRound = 1;
+        correctPatterns = 0;
+        totalAttempts = 0;
+        elapsedSeconds = 0;
+        gameStartTime = DateTime.Now;
+
+        // Set grid size and pattern size based on level
+        switch (selectedLevel)
+        {
+            case 1:
+                gridSize = 3;
+                patternSize = 3;
+                totalRounds = 5;
+                break;
+            case 2:
+                gridSize = 4;
+                patternSize = 5;
+                totalRounds = 6;
+                break;
+            case 3:
+                gridSize = 5;
+                patternSize = 7;
+                totalRounds = 7;
+                break;
+        }
+
+        InitializeGrid();
+
+        // Start timer
+        timerHandle = new System.Threading.Timer(_ =>
+        {
+            elapsedSeconds++;
+            InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+
+        StateHasChanged();
+
+        // Start first round
+        await StartNewRound();
+    }
+
+    private void InitializeGrid()
+    {
+        gridCells.Clear();
+        int totalCells = gridSize * gridSize;
+        for (int i = 0; i < totalCells; i++)
+        {
+            gridCells.Add(new CellData { Index = i });
+        }
+    }
+
+    private async Task StartNewRound()
+    {
+        // Reset cells
+        foreach (var cell in gridCells)
+        {
+            cell.IsHighlighted = false;
+            cell.IsSelected = false;
+            cell.IsCorrect = false;
+            cell.IsIncorrect = false;
+        }
+
+        showFeedback = false;
+        inputPhase = false;
+        showingPattern = true;
+        patternCountdown = 3;
+        StateHasChanged();
+
+        // Generate random pattern
+        currentPattern.Clear();
+        var random = new Random();
+        while (currentPattern.Count < patternSize)
+        {
+            int randomCell = random.Next(gridSize * gridSize);
+            currentPattern.Add(randomCell);
+        }
+
+        // Countdown before showing pattern
+        for (int i = 3; i > 0; i--)
+        {
+            patternCountdown = i;
+            StateHasChanged();
+            await Task.Delay(800);
+        }
+
+        // Show pattern
+        foreach (var cellIndex in currentPattern)
+        {
+            gridCells[cellIndex].IsHighlighted = true;
+        }
+        StateHasChanged();
+
+        // Display duration based on level
+        int displayTimeMs = selectedLevel switch
+        {
+            1 => 3000,
+            2 => 2500,
+            3 => 2000,
+            _ => 3000
+        };
+
+        await Task.Delay(displayTimeMs);
+
+        // Hide pattern, start input phase
+        foreach (var cell in gridCells)
+        {
+            cell.IsHighlighted = false;
+        }
+
+        showingPattern = false;
+        inputPhase = true;
+        StateHasChanged();
+    }
+
+    private void HandleCellClick(int index)
+    {
+        if (!inputPhase) return;
+
+        var cell = gridCells[index];
+        cell.IsSelected = !cell.IsSelected;
+        StateHasChanged();
+    }
+
+    private async Task HandleSubmitPattern()
+    {
+        if (!inputPhase) return;
+
+        inputPhase = false;
+        totalAttempts++;
+
+        // Check if selected cells match the pattern
+        var selectedIndices = gridCells
+            .Where(c => c.IsSelected)
+            .Select(c => c.Index)
+            .ToHashSet();
+
+        bool isCorrect = selectedIndices.SetEquals(currentPattern);
+
+        if (isCorrect)
+        {
+            correctPatterns++;
+            lastRoundCorrect = true;
+
+            // Mark cells as correct
+            foreach (var cell in gridCells.Where(c => c.IsSelected))
+            {
+                cell.IsCorrect = true;
+            }
+        }
+        else
+        {
+            lastRoundCorrect = false;
+
+            // Show which cells were wrong and which were right
+            foreach (var cell in gridCells)
+            {
+                if (cell.IsSelected && currentPattern.Contains(cell.Index))
+                {
+                    cell.IsCorrect = true;
+                }
+                else if (cell.IsSelected && !currentPattern.Contains(cell.Index))
+                {
+                    cell.IsIncorrect = true;
+                }
+                else if (!cell.IsSelected && currentPattern.Contains(cell.Index))
+                {
+                    cell.IsHighlighted = true; // Show missed cells
+                }
+            }
+        }
+
+        showFeedback = true;
+        StateHasChanged();
+
+        await Task.Delay(1500);
+
+        // Check if game is over
+        if (currentRound >= totalRounds)
+        {
+            await EndGame();
+        }
+        else
+        {
+            currentRound++;
+            await StartNewRound();
+        }
+    }
+
+    private async Task EndGame()
+    {
+        gameEnded = true;
+        timerHandle?.Dispose();
+
+        // Calculate statistics
+        double accuracy = totalRounds > 0 ? (correctPatterns * 100.0 / totalRounds) : 0;
+        int score = (int)(accuracy * (selectedLevel * 0.5 + 0.5));
+
+        _gameSessionResult = new GameSessionResult
+        {
+            GameType = "PatternCopy",
+            DifficultyLevel = selectedLevel,
+            OverallScore = score,
+            AccuracyPercentage = accuracy,
+            TotalMoves = totalAttempts,
+            CorrectMatches = correctPatterns,
+            ErrorCount = totalRounds - correctPatterns,
+            ElapsedSeconds = elapsedSeconds,
+            StartTime = gameStartTime,
+            EndTime = DateTime.Now
+        };
+
+        Logger?.LogInformation($"Game ended. Score: {score}, Accuracy: {accuracy:F1}%");
+
+        await AnalyzeGameWithAI();
+    }
+
+    private async Task AnalyzeGameWithAI()
+    {
+        aiAnalyzing = true;
+        StateHasChanged();
+
+        try
+        {
+            _aiResponse = await AiService.AnalyzeGamePerformanceAsync(
+                _gameSessionResult ?? new GameSessionResult(),
+                "Player",
+                0
+            );
+
+            Logger?.LogInformation($"AI Analysis complete: Score {_aiResponse?.PerformanceScore}");
+
+            // Autosave game result
+            await AutosaveGameResultAsync(_aiResponse);
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"AI Analysis failed: {ex.Message}");
+            _aiResponse = new GameAiAnalysisService.AiAnalysisResponse
+            {
+                Encouragement = "Great job completing the pattern game!",
+                FunMessage = "Your memory is getting stronger! 🧠",
+                EffortNote = "Keep practicing to improve your pattern recognition!",
+                PerformanceScore = _gameSessionResult?.OverallScore ?? 50,
+                NextDifficultyLevel = Math.Min(3, selectedLevel + 1),
+                Confidence = 0.7
+            };
+
+            await AutosaveGameResultAsync(_aiResponse);
+        }
+
+        aiAnalyzing = false;
+        StateHasChanged();
+    }
+
+    private async Task AutosaveGameResultAsync(GameAiAnalysisService.AiAnalysisResponse? aiResponse)
+    {
+        try
+        {
+            var userId = await GetCurrentUserIdAsync();
+            var username = await GetCurrentUsernameAsync();
+
+            var autosaveRequest = new
+            {
+                UserId = userId,
+                Username = username,
+                GameType = "PatternCopy",
+                GameMode = "Practice",
+                Difficulty = selectedLevel,
+                DifficultyName = GetDifficultyName(selectedLevel),
+                Score = (int)(aiResponse?.PerformanceScore ?? 0),
+                Accuracy = (decimal)(totalRounds > 0 ? (correctPatterns * 100.0 / totalRounds) : 0),
+                TotalMoves = totalAttempts,
+                CorrectMoves = correctPatterns,
+                ErrorCount = totalRounds - correctPatterns,
+                TimeTakenSeconds = elapsedSeconds,
+                PatternSize = patternSize,
+                GridSize = gridSize,
+                TotalRounds = totalRounds,
+                CorrectPatterns = correctPatterns,
+                AiEncouragement = aiResponse?.Encouragement ?? "Great job!",
+                AiFunMessage = aiResponse?.FunMessage ?? "Keep playing!",
+                AiEffortNote = aiResponse?.EffortNote ?? "Nice effort!",
+                RecommendedDifficulty = GetDifficultyName((int)(aiResponse?.NextDifficultyLevel ?? selectedLevel)),
+                AiConfidence = aiResponse?.Confidence ?? 0.7,
+                StartTime = gameStartTime,
+                EndTime = DateTime.UtcNow,
+                Notes = $"Pattern Copy - Level {selectedLevel} - {correctPatterns}/{totalRounds} patterns correct in {elapsedSeconds}s"
+            };
+
+            var apiUrl = $"{NavigationManager.BaseUri}api/json-stats/save";
+            var response = await Http.PostAsJsonAsync(apiUrl, autosaveRequest);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Logger?.LogInformation("✅ Game result autosaved to JSON (PatternCopy)");
+            }
+            else
+            {
+                Logger?.LogWarning($"⚠️ JSON autosave returned status: {response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"❌ JSON autosave failed: {ex.Message}");
+        }
+    }
+
+    private string GetDifficultyName(int level) => level switch
+    {
+        1 => "Easy",
+        2 => "Medium",
+        3 => "Hard",
+        _ => "Unknown"
+    };
+
+    private async Task<int> GetCurrentUserIdAsync()
+    {
+        try
+        {
+            var userIdStr = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "userId");
+            return int.TryParse(userIdStr, out var id) ? id : 1;
+        }
+        catch { return 1; }
+    }
+
+    private async Task<string> GetCurrentUsernameAsync()
+    {
+        try
+        {
+            var username = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "username");
+            return !string.IsNullOrEmpty(username) ? username : "Guest";
+        }
+        catch { return "Guest"; }
+    }
+
+    private string GetCellClass(CellData cell)
+    {
+        if (cell.IsCorrect) return "correct";
+        if (cell.IsIncorrect) return "incorrect";
+        if (cell.IsHighlighted) return "highlighted";
+        if (cell.IsSelected) return "selected";
+        return "";
+    }
+
+    private async Task HandleResetGame()
+    {
+        selectedLevel = 0;
+        gameStarted = false;
+        gameEnded = false;
+        aiAnalyzing = false;
+        currentRound = 1;
+        correctPatterns = 0;
+        totalAttempts = 0;
+        elapsedSeconds = 0;
+        timerHandle?.Dispose();
+        gridCells.Clear();
+        currentPattern.Clear();
+        _gameSessionResult = null;
+        _aiResponse = null;
+        StateHasChanged();
+    }
+
+    private async Task HandlePlayNextLevel()
+    {
+        if (_aiResponse?.NextDifficultyLevel > 0)
+        {
+            selectedLevel = Math.Min(3, (int)_aiResponse.NextDifficultyLevel);
+        }
+        await HandleResetGame();
+        await HandleStartGame();
+    }
+
+    public void Dispose()
+    {
+        timerHandle?.Dispose();
+    }
+}

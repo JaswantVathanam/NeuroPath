@@ -1,0 +1,2312 @@
+@page "/activities/sound-therapy"
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Sound Therapy - NeuroPath</PageTitle>
+
+<div class="activity-container">
+    <div class="activity-header">
+        <button class="back-btn" @onclick="async () => await GoBack()">
+            <i class="bi bi-arrow-left"></i>
+        </button>
+        <div class="header-info">
+            <h1><i class="bi bi-music-note-beamed"></i> Sound Therapy</h1>
+            <p>Healing sounds for relaxation and mental wellness</p>
+        </div>
+        <div class="session-info">
+            @if (selectedSounds.Any())
+            {
+                <span class="mix-badge">
+                    <i class="bi bi-layers"></i>
+                    @selectedSounds.Count Mix
+                </span>
+            }
+            <span class="session-time">
+                <i class="bi bi-clock"></i>
+                @FormatTime(elapsedSeconds)
+            </span>
+        </div>
+    </div>
+
+    <div class="sound-content">
+        @if (!sessionStarted)
+        {
+            <div class="start-screen">
+                <div class="sound-icon">
+                    <i class="bi bi-soundwave"></i>
+                </div>
+                <h2>Sound Therapy</h2>
+                <p>Mix & match multiple sounds to create your perfect relaxation blend</p>
+
+                <!-- Sound Categories -->
+                <div class="category-tabs">
+                    @foreach (var category in soundCategories)
+                    {
+                        <button class="category-tab @(selectedCategory == category.Key ? "active" : "")"
+                                @onclick="() => SelectCategory(category.Key)">
+                            <i class="bi @category.Value.Icon"></i>
+                            @category.Value.Name
+                        </button>
+                    }
+                </div>
+
+                <!-- Selected Sounds Preview (Mix & Match) -->
+                @if (selectedSounds.Any())
+                {
+                    <div class="mix-preview">
+                        <div class="mix-header">
+                            <h3><i class="bi bi-layers-fill"></i> Your Sound Mix (@selectedSounds.Count)</h3>
+                            <button class="clear-mix-btn" @onclick="ClearAllSounds">
+                                <i class="bi bi-x-circle"></i> Clear All
+                            </button>
+                        </div>
+                        <div class="mix-sounds">
+                            @foreach (var sound in selectedSounds)
+                            {
+                                <div class="mix-sound-chip">
+                                    <i class="bi @sound.Icon"></i>
+                                    <span>@sound.Name</span>
+                                    <button class="remove-sound-btn" @onclick="() => RemoveSound(sound)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                        <div class="mix-tip">
+                            <i class="bi bi-lightbulb"></i>
+                            <span>Tip: Try mixing Rain + Piano or Ocean + Singing Bowls for a calming blend!</span>
+                        </div>
+                    </div>
+                }
+
+                <!-- Sound Grid -->
+                <div class="sound-grid">
+                    @foreach (var sound in GetSoundsForCategory())
+                    {
+                        <div class="sound-card @(selectedSounds.Contains(sound) ? "selected" : "") @(isPreviewPlaying && previewSound == sound ? "previewing" : "")"
+                             @onclick="() => ToggleSound(sound)">
+                            <div class="sound-visual">
+                                <i class="bi @sound.Icon"></i>
+                                @if (selectedSounds.Contains(sound))
+                                {
+                                    <div class="check-badge">
+                                        <i class="bi bi-check"></i>
+                                    </div>
+                                }
+                            </div>
+                            <h3>@sound.Name</h3>
+                            <p>@sound.Description</p>
+                            <button class="preview-btn" @onclick="() => PreviewSound(sound)" @onclick:stopPropagation="true"
+                                    title="Preview sound">
+                                <i class="bi @(isPreviewPlaying && previewSound == sound ? "bi-stop-fill" : "bi-play-fill")"></i>
+                            </button>
+                        </div>
+                    }
+                </div>
+
+                <!-- Preset Mixes -->
+                <div class="preset-section">
+                    <h3><i class="bi bi-collection-play"></i> Quick Presets</h3>
+                    <div class="preset-grid">
+                        @foreach (var preset in presetMixes)
+                        {
+                            <button class="preset-btn" @onclick="() => ApplyPreset(preset)">
+                                <span class="preset-icon">@preset.Emoji</span>
+                                <span class="preset-name">@preset.Name</span>
+                                <span class="preset-desc">@preset.Description</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <!-- AI Curated Sound Mix -->
+                <div class="ai-curation-section">
+                    <h3><i class="bi bi-stars"></i> AI Sound Curator <span class="ai-badge">Phi-4</span></h3>
+                    <p class="ai-description">Tell the AI how you're feeling, and it will create a personalized sound mix just for you</p>
+                    
+                    <div class="ai-input-area">
+                        <div class="mood-quick-select">
+                            <span class="quick-label">Quick mood:</span>
+                            @foreach (var quickMood in aiQuickMoods)
+                            {
+                                <button class="quick-mood-btn @(aiMoodInput == quickMood.Text ? "selected" : "")" 
+                                        @onclick="() => SelectAIMood(quickMood.Text)">
+                                    <span>@quickMood.Emoji</span>
+                                    <span>@quickMood.Label</span>
+                                </button>
+                            }
+                        </div>
+                        
+                        <div class="ai-text-input">
+                            <textarea @bind="aiMoodInput" @bind:event="oninput"
+                                      placeholder="Describe how you're feeling... e.g., 'I'm stressed from work and need to relax' or 'I want to focus while studying' or 'I can't sleep and need calming sounds'"
+                                      rows="2"></textarea>
+                        </div>
+                        
+                        <button class="ai-curate-btn" @onclick="GetAICuratedMix" disabled="@(isAICurating || string.IsNullOrWhiteSpace(aiMoodInput))">
+                            @if (isAICurating)
+                            {
+                                <i class="bi bi-hourglass-split spinning"></i>
+                                <span>Phi-4 is crafting your mix...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-magic"></i>
+                                <span>Create My Perfect Mix</span>
+                            }
+                        </button>
+                    </div>
+                    
+                    @if (aiCuratedResult != null)
+                    {
+                        <div class="ai-result-card">
+                            <div class="ai-result-header">
+                                <div class="ai-avatar">
+                                    <i class="bi bi-robot"></i>
+                                </div>
+                                <div class="ai-result-title">
+                                    <h4>@aiCuratedResult.MixName</h4>
+                                    <span class="ai-source">Curated by Phi-4</span>
+                                </div>
+                            </div>
+                            
+                            <p class="ai-explanation">@aiCuratedResult.Explanation</p>
+                            
+                            <div class="ai-recommended-sounds">
+                                @foreach (var soundName in aiCuratedResult.RecommendedSounds)
+                                {
+                                    var sound = allSounds.FirstOrDefault(s => s.Name == soundName);
+                                    if (sound != null)
+                                    {
+                                        <div class="ai-sound-chip">
+                                            <i class="bi @sound.Icon"></i>
+                                            <span>@sound.Name</span>
+                                            <span class="sound-volume">@(aiCuratedResult.VolumeSettings.GetValueOrDefault(soundName, 70))%</span>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                            
+                            @if (!string.IsNullOrEmpty(aiCuratedResult.WellnessTip))
+                            {
+                                <div class="ai-wellness-tip">
+                                    <i class="bi bi-lightbulb-fill"></i>
+                                    <span>@aiCuratedResult.WellnessTip</span>
+                                </div>
+                            }
+                            
+                            <div class="ai-result-actions">
+                                <button class="apply-ai-btn" @onclick="ApplyAICuratedMix">
+                                    <i class="bi bi-check-lg"></i> Apply This Mix
+                                </button>
+                                <button class="try-another-btn" @onclick="() => aiCuratedResult = null">
+                                    <i class="bi bi-arrow-repeat"></i> Try Another
+                                </button>
+                            </div>
+                        </div>
+                    }
+                    
+                    @if (!string.IsNullOrEmpty(aiError))
+                    {
+                        <div class="ai-error">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <span>@aiError</span>
+                        </div>
+                    }
+                </div>
+
+                <!-- Duration Selection -->
+                <div class="duration-section">
+                    <h3><i class="bi bi-hourglass-split"></i> Session Duration</h3>
+                    <div class="duration-options">
+                        @foreach (var duration in sessionDurations)
+                        {
+                            <button class="duration-btn @(selectedDuration == duration.Minutes ? "active" : "")"
+                                    @onclick="() => SelectDuration(duration.Minutes)">
+                                <span class="duration-value">@duration.Minutes</span>
+                                <span class="duration-label">min</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <button class="start-btn" @onclick="StartSession" disabled="@(!selectedSounds.Any())">
+                    <i class="bi bi-play-fill"></i> Begin Session
+                </button>
+
+                @if (!selectedSounds.Any())
+                {
+                    <p class="hint-text">Select at least one sound to begin (you can mix multiple!)</p>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="playing-session">
+                <div class="session-visual">
+                    <div class="visualizer">
+                        @for (int i = 0; i < 20; i++)
+                        {
+                            <div class="bar @(isPaused ? "" : "animate")" style="animation-delay: @(i * 0.05)s"></div>
+                        }
+                    </div>
+                    <div class="now-playing-info">
+                        <span class="playing-label">Now Playing</span>
+                        <h2>@GetPlayingSoundsText()</h2>
+                    </div>
+                </div>
+
+                <!-- Active Sounds -->
+                <div class="active-sounds">
+                    @foreach (var sound in selectedSounds)
+                    {
+                        <div class="active-sound-card">
+                            <div class="sound-icon-small">
+                                <i class="bi @sound.Icon"></i>
+                            </div>
+                            <div class="sound-details">
+                                <span class="sound-name">@sound.Name</span>
+                                <div class="volume-control">
+                                    <i class="bi bi-volume-down"></i>
+                                    <input type="range" min="0" max="100" value="@sound.Volume" 
+                                           @oninput="async (e) => await UpdateVolume(sound, e)" />
+                                    <i class="bi bi-volume-up"></i>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- Timer Display -->
+                <div class="timer-section">
+                    <div class="timer-ring">
+                        <svg viewBox="0 0 100 100">
+                            <circle class="timer-bg" cx="50" cy="50" r="45" />
+                            <circle class="timer-progress" cx="50" cy="50" r="45" 
+                                    stroke-dasharray="283" 
+                                    stroke-dashoffset="@GetTimerOffset()" />
+                        </svg>
+                        <div class="timer-text">
+                            <span class="time-remaining">@FormatTime(remainingSeconds)</span>
+                            <span class="time-label">remaining</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Session Stats -->
+                <div class="session-stats">
+                    <div class="stat-item">
+                        <i class="bi bi-clock-history"></i>
+                        <span class="stat-value">@FormatTime(elapsedSeconds)</span>
+                        <span class="stat-label">Elapsed</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="bi bi-music-note-list"></i>
+                        <span class="stat-value">@selectedSounds.Count</span>
+                        <span class="stat-label">Sounds</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="bi bi-heart-pulse"></i>
+                        <span class="stat-value">@GetMoodEmoji()</span>
+                        <span class="stat-label">Vibe</span>
+                    </div>
+                </div>
+
+                <!-- Control Buttons -->
+                <div class="control-buttons">
+                    <button class="control-btn pause" @onclick="async () => await TogglePause()">
+                        <i class="bi @(isPaused ? "bi-play-fill" : "bi-pause-fill")"></i>
+                        @(isPaused ? "Resume" : "Pause")
+                    </button>
+                    <button class="control-btn end" @onclick="async () => await EndSession()">
+                        <i class="bi bi-stop-fill"></i>
+                        End Session
+                    </button>
+                </div>
+            </div>
+        }
+
+        @if (showSummary)
+        {
+            <div class="summary-overlay">
+                <div class="summary-card">
+                    <div class="summary-icon">
+                        <i class="bi bi-stars"></i>
+                    </div>
+                    <h2>Session Complete!</h2>
+                    <p>You've completed your sound therapy session</p>
+
+                    <div class="summary-stats">
+                        <div class="summary-stat">
+                            <span class="value">@FormatTime(elapsedSeconds)</span>
+                            <span class="label">Total Duration</span>
+                        </div>
+                        <div class="summary-stat">
+                            <span class="value">@selectedSounds.Count</span>
+                            <span class="label">Sounds Used</span>
+                        </div>
+                        <div class="summary-stat">
+                            <span class="value">@GetRelaxationScore()%</span>
+                            <span class="label">Completion</span>
+                        </div>
+                    </div>
+
+                    <!-- Mood Check -->
+                    <div class="mood-check">
+                        <h3><i class="bi bi-emoji-smile"></i> How do you feel now?</h3>
+                        <div class="mood-options">
+                            @foreach (var mood in moods)
+                            {
+                                <button class="mood-btn @(selectedMood == mood.Name ? "selected" : "")"
+                                        @onclick="() => SelectMood(mood.Name)">
+                                    <span class="mood-emoji">@mood.Emoji</span>
+                                    <span class="mood-name">@mood.Name</span>
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="wellness-tip">
+                        <i class="bi bi-lightbulb"></i>
+                        <span>@GetWellnessTip()</span>
+                    </div>
+
+                    <div class="summary-actions">
+                        <button class="action-btn primary" @onclick="ResetSession">
+                            <i class="bi bi-arrow-repeat"></i> New Session
+                        </button>
+                        <button class="action-btn secondary" @onclick="GoBack">
+                            <i class="bi bi-grid"></i> All Activities
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private bool sessionStarted = false;
+    private bool isPaused = false;
+    private bool showSummary = false;
+    private string selectedCategory = "nature";
+    private List<SoundOption> selectedSounds = new();
+    private int selectedDuration = 10;
+    private int elapsedSeconds = 0;
+    private int remainingSeconds = 0;
+    private string selectedMood = "";
+    private System.Timers.Timer? sessionTimer;
+    private bool isPreviewPlaying = false;
+    private SoundOption? previewSound = null;
+    private bool audioInitialized = false;
+    
+    // User info from localStorage
+    private int userId = 0;
+    private string username = "";
+    
+    // AI Curation state
+    private string aiMoodInput = "";
+    private bool isAICurating = false;
+    private AICuratedMix? aiCuratedResult = null;
+    private string aiError = "";
+    private List<string> previouslyRecommendedSounds = new(); // Track for variety
+    
+    private List<QuickMood> aiQuickMoods = new()
+    {
+        new QuickMood { Emoji = "😰", Label = "Stressed", Text = "I'm feeling stressed and anxious, need to calm down" },
+        new QuickMood { Emoji = "😴", Label = "Sleepy", Text = "I want to fall asleep peacefully" },
+        new QuickMood { Emoji = "🎯", Label = "Focus", Text = "I need to concentrate and focus on my work" },
+        new QuickMood { Emoji = "😔", Label = "Sad", Text = "I'm feeling down and need something uplifting" },
+        new QuickMood { Emoji = "🧘", Label = "Meditate", Text = "I want to meditate and find inner peace" },
+        new QuickMood { Emoji = "☕", Label = "Cozy", Text = "I want a cozy, warm atmosphere to relax" }
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var userIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+                var usernameStr = await JS.InvokeAsync<string>("localStorage.getItem", "username");
+                
+                if (!string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out var parsedId))
+                {
+                    userId = parsedId;
+                }
+                username = usernameStr ?? "";
+                
+                // Initialize audio
+                await InitializeAudio();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading user info: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task InitializeAudio()
+    {
+        if (audioInitialized) return;
+        try
+        {
+            await JS.InvokeVoidAsync("eval", "if(typeof initializeSoundTherapy === 'undefined') { " +
+                "var script = document.createElement('script'); " +
+                "script.src = '/js/sound-therapy.js'; " +
+                "document.head.appendChild(script); }");
+            
+            await Task.Delay(500); // Wait for script to load
+            audioInitialized = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing audio: {ex.Message}");
+        }
+    }
+
+    private Dictionary<string, SoundCategory> soundCategories = new()
+    {
+        { "nature", new SoundCategory { Name = "Nature", Icon = "bi-tree" } },
+        { "ambient", new SoundCategory { Name = "Ambient", Icon = "bi-soundwave" } },
+        { "music", new SoundCategory { Name = "Music", Icon = "bi-music-note" } },
+        { "meditation", new SoundCategory { Name = "Meditation", Icon = "bi-yin-yang" } }
+    };
+
+    private List<SoundOption> allSounds = new()
+    {
+        // Nature Sounds
+        new SoundOption { Name = "Rain", Description = "Gentle rainfall", Icon = "bi-cloud-rain", Category = "nature", Volume = 70 },
+        new SoundOption { Name = "Ocean Waves", Description = "Calming sea sounds", Icon = "bi-water", Category = "nature", Volume = 70 },
+        new SoundOption { Name = "Forest", Description = "Birds & rustling leaves", Icon = "bi-tree-fill", Category = "nature", Volume = 70 },
+        new SoundOption { Name = "Thunder", Description = "Distant thunder", Icon = "bi-cloud-lightning", Category = "nature", Volume = 50 },
+        new SoundOption { Name = "Waterfall", Description = "Flowing water", Icon = "bi-droplet-fill", Category = "nature", Volume = 70 },
+        new SoundOption { Name = "Wind", Description = "Gentle breeze", Icon = "bi-wind", Category = "nature", Volume = 60 },
+        
+        // Ambient Sounds
+        new SoundOption { Name = "White Noise", Description = "Static relaxation", Icon = "bi-broadcast", Category = "ambient", Volume = 60 },
+        new SoundOption { Name = "Pink Noise", Description = "Deep relaxation", Icon = "bi-vinyl-fill", Category = "ambient", Volume = 60 },
+        new SoundOption { Name = "Brown Noise", Description = "Low frequency calm", Icon = "bi-circle-fill", Category = "ambient", Volume = 60 },
+        new SoundOption { Name = "Fireplace", Description = "Crackling fire", Icon = "bi-fire", Category = "ambient", Volume = 70 },
+        new SoundOption { Name = "Coffee Shop", Description = "Cafe ambiance", Icon = "bi-cup-hot", Category = "ambient", Volume = 50 },
+        
+        // Music
+        new SoundOption { Name = "Piano", Description = "Soft piano melodies", Icon = "bi-music-player", Category = "music", Volume = 70 },
+        new SoundOption { Name = "Strings", Description = "Gentle orchestral", Icon = "bi-music-note-beamed", Category = "music", Volume = 70 },
+        new SoundOption { Name = "Ambient Pads", Description = "Atmospheric synths", Icon = "bi-broadcast-pin", Category = "music", Volume = 60 },
+        new SoundOption { Name = "Guitar", Description = "Acoustic melodies", Icon = "bi-music-note-list", Category = "music", Volume = 70 },
+        
+        // Meditation
+        new SoundOption { Name = "Singing Bowls", Description = "Tibetan bowls", Icon = "bi-circle", Category = "meditation", Volume = 70 },
+        new SoundOption { Name = "Chimes", Description = "Wind chimes", Icon = "bi-bell", Category = "meditation", Volume = 60 },
+        new SoundOption { Name = "Om Chant", Description = "Sacred sound", Icon = "bi-yin-yang", Category = "meditation", Volume = 50 },
+        new SoundOption { Name = "Binaural Beats", Description = "Alpha waves (10Hz)", Icon = "bi-activity", Category = "meditation", Volume = 50 },
+        new SoundOption { Name = "Temple Bells", Description = "Buddhist bells", Icon = "bi-bell-fill", Category = "meditation", Volume = 60 }
+    };
+
+    private List<PresetMix> presetMixes = new()
+    {
+        new PresetMix { Name = "Rainy Day", Emoji = "🌧️", Description = "Rain + Thunder + Fireplace", Sounds = new[] { "Rain", "Thunder", "Fireplace" } },
+        new PresetMix { Name = "Beach Vibes", Emoji = "🏖️", Description = "Ocean + Wind + Guitar", Sounds = new[] { "Ocean Waves", "Wind", "Guitar" } },
+        new PresetMix { Name = "Deep Focus", Emoji = "🎯", Description = "Brown Noise + Binaural", Sounds = new[] { "Brown Noise", "Binaural Beats" } },
+        new PresetMix { Name = "Zen Garden", Emoji = "🧘", Description = "Forest + Singing Bowls", Sounds = new[] { "Forest", "Singing Bowls", "Chimes" } },
+        new PresetMix { Name = "Sleep Well", Emoji = "😴", Description = "Rain + Piano + Pink Noise", Sounds = new[] { "Rain", "Piano", "Pink Noise" } },
+        new PresetMix { Name = "Cozy Evening", Emoji = "☕", Description = "Fireplace + Coffee Shop", Sounds = new[] { "Fireplace", "Coffee Shop", "Piano" } },
+        new PresetMix { Name = "Meditation", Emoji = "🕉️", Description = "Om + Bowls + Bells", Sounds = new[] { "Om Chant", "Singing Bowls", "Temple Bells" } },
+        new PresetMix { Name = "Nature Walk", Emoji = "🌲", Description = "Forest + Waterfall + Wind", Sounds = new[] { "Forest", "Waterfall", "Wind" } }
+    };
+
+    private List<SessionDuration> sessionDurations = new()
+    {
+        new SessionDuration { Minutes = 5, Label = "Quick" },
+        new SessionDuration { Minutes = 10, Label = "Standard" },
+        new SessionDuration { Minutes = 15, Label = "Extended" },
+        new SessionDuration { Minutes = 30, Label = "Deep" },
+        new SessionDuration { Minutes = 60, Label = "Full" }
+    };
+
+    private List<MoodOption> moods = new()
+    {
+        new MoodOption { Name = "Calm", Emoji = "😌" },
+        new MoodOption { Name = "Relaxed", Emoji = "😊" },
+        new MoodOption { Name = "Peaceful", Emoji = "🧘" },
+        new MoodOption { Name = "Refreshed", Emoji = "✨" },
+        new MoodOption { Name = "Sleepy", Emoji = "😴" }
+    };
+
+    private List<string> wellnessTips = new()
+    {
+        "Regular sound therapy can reduce stress hormones by up to 65%.",
+        "Combining nature sounds with deep breathing amplifies relaxation.",
+        "Listening to calming sounds before bed can improve sleep quality.",
+        "Sound therapy activates the parasympathetic nervous system.",
+        "Even 10 minutes of sound therapy can reset your stress response.",
+        "Nature sounds have been proven to lower blood pressure and heart rate.",
+        "Binaural beats at 10Hz promote alpha brain waves for relaxation.",
+        "Mixing 2-3 sounds creates a richer, more immersive experience."
+    };
+
+    private class SoundCategory
+    {
+        public string Name { get; set; } = "";
+        public string Icon { get; set; } = "";
+    }
+
+    private class SoundOption
+    {
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Icon { get; set; } = "";
+        public string Category { get; set; } = "";
+        public int Volume { get; set; } = 70;
+    }
+
+    private class SessionDuration
+    {
+        public int Minutes { get; set; }
+        public string Label { get; set; } = "";
+    }
+
+    private class MoodOption
+    {
+        public string Name { get; set; } = "";
+        public string Emoji { get; set; } = "";
+    }
+
+    private class PresetMix
+    {
+        public string Name { get; set; } = "";
+        public string Emoji { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string[] Sounds { get; set; } = Array.Empty<string>();
+    }
+    
+    private class QuickMood
+    {
+        public string Emoji { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string Text { get; set; } = "";
+    }
+    
+    private class AICuratedMix
+    {
+        public string MixName { get; set; } = "";
+        public List<string> RecommendedSounds { get; set; } = new();
+        public Dictionary<string, int> VolumeSettings { get; set; } = new();
+        public string Explanation { get; set; } = "";
+        public string WellnessTip { get; set; } = "";
+        public int RecommendedDuration { get; set; } = 15;
+    }
+    
+    private void SelectAIMood(string moodText)
+    {
+        aiMoodInput = moodText;
+        aiCuratedResult = null;
+        aiError = "";
+    }
+    
+    private async Task GetAICuratedMix()
+    {
+        if (string.IsNullOrWhiteSpace(aiMoodInput)) return;
+        
+        isAICurating = true;
+        aiError = "";
+        aiCuratedResult = null;
+        StateHasChanged();
+        
+        try
+        {
+            var availableSounds = allSounds.Select(s => new { s.Name, s.Description, s.Category }).ToList();
+            
+            var request = new
+            {
+                userMood = aiMoodInput,
+                availableSounds = availableSounds,
+                username = username,
+                previousSounds = previouslyRecommendedSounds // Send for variety
+            };
+            
+            var apiUrl = $"{Navigation.BaseUri}api/activities/ai-curate-sounds";
+            var response = await Http.PostAsJsonAsync(apiUrl, request);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<AICurationResponse>();
+                if (result != null && result.Success)
+                {
+                    aiCuratedResult = new AICuratedMix
+                    {
+                        MixName = result.MixName ?? "Your Custom Mix",
+                        RecommendedSounds = result.RecommendedSounds ?? new List<string>(),
+                        VolumeSettings = result.VolumeSettings ?? new Dictionary<string, int>(),
+                        Explanation = result.Explanation ?? "A personalized mix based on your mood.",
+                        WellnessTip = result.WellnessTip ?? "",
+                        RecommendedDuration = result.RecommendedDuration
+                    };
+                    
+                    // Track recommended sounds for variety (keep last 2 sessions)
+                    if (aiCuratedResult.RecommendedSounds.Any())
+                    {
+                        previouslyRecommendedSounds.AddRange(aiCuratedResult.RecommendedSounds);
+                        // Keep only the last 8-10 sounds to allow repeats after some variety
+                        if (previouslyRecommendedSounds.Count > 10)
+                        {
+                            previouslyRecommendedSounds = previouslyRecommendedSounds.TakeLast(10).ToList();
+                        }
+                    }
+                }
+                else
+                {
+                    aiError = result?.Error ?? "Failed to get AI recommendation. Please try again.";
+                }
+            }
+            else
+            {
+                aiError = "Could not connect to AI service. Please ensure Phi-4 is running.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"AI Curation error: {ex.Message}");
+            aiError = "An error occurred while getting AI recommendations.";
+        }
+        finally
+        {
+            isAICurating = false;
+            StateHasChanged();
+        }
+    }
+    
+    private void ApplyAICuratedMix()
+    {
+        if (aiCuratedResult == null) return;
+        
+        selectedSounds.Clear();
+        foreach (var soundName in aiCuratedResult.RecommendedSounds)
+        {
+            var sound = allSounds.FirstOrDefault(s => s.Name == soundName);
+            if (sound != null)
+            {
+                // Apply AI-recommended volume
+                if (aiCuratedResult.VolumeSettings.TryGetValue(soundName, out var volume))
+                {
+                    sound.Volume = volume;
+                }
+                selectedSounds.Add(sound);
+            }
+        }
+        
+        // Apply recommended duration
+        if (aiCuratedResult.RecommendedDuration > 0)
+        {
+            selectedDuration = aiCuratedResult.RecommendedDuration;
+        }
+        
+        // Clear the AI result after applying
+        aiCuratedResult = null;
+        StateHasChanged();
+    }
+    
+    private class AICurationResponse
+    {
+        public bool Success { get; set; }
+        public string? MixName { get; set; }
+        public List<string>? RecommendedSounds { get; set; }
+        public Dictionary<string, int>? VolumeSettings { get; set; }
+        public string? Explanation { get; set; }
+        public string? WellnessTip { get; set; }
+        public int RecommendedDuration { get; set; }
+        public string? Error { get; set; }
+    }
+
+    private void SelectCategory(string category)
+    {
+        selectedCategory = category;
+    }
+
+    private List<SoundOption> GetSoundsForCategory()
+    {
+        return allSounds.Where(s => s.Category == selectedCategory).ToList();
+    }
+
+    private void ToggleSound(SoundOption sound)
+    {
+        if (selectedSounds.Contains(sound))
+        {
+            selectedSounds.Remove(sound);
+        }
+        else
+        {
+            selectedSounds.Add(sound);
+        }
+    }
+
+    private void RemoveSound(SoundOption sound)
+    {
+        selectedSounds.Remove(sound);
+    }
+
+    private void ClearAllSounds()
+    {
+        selectedSounds.Clear();
+    }
+
+    private async Task PreviewSound(SoundOption sound)
+    {
+        try
+        {
+            await InitializeAudio();
+            
+            if (isPreviewPlaying && previewSound == sound)
+            {
+                // Stop preview
+                await JS.InvokeVoidAsync("stopTherapySound", sound.Name);
+                isPreviewPlaying = false;
+                previewSound = null;
+            }
+            else
+            {
+                // Stop any current preview
+                if (previewSound != null)
+                {
+                    await JS.InvokeVoidAsync("stopTherapySound", previewSound.Name);
+                }
+                
+                // Start new preview
+                await JS.InvokeVoidAsync("initializeSoundTherapy");
+                await JS.InvokeVoidAsync("playTherapySound", sound.Name, sound.Volume);
+                isPreviewPlaying = true;
+                previewSound = sound;
+                
+                // Auto-stop after 5 seconds
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(5000);
+                    if (previewSound == sound && !sessionStarted)
+                    {
+                        await InvokeAsync(async () =>
+                        {
+                            try
+                            {
+                                await JS.InvokeVoidAsync("stopTherapySound", sound.Name);
+                                isPreviewPlaying = false;
+                                previewSound = null;
+                                StateHasChanged();
+                            }
+                            catch { }
+                        });
+                    }
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Preview error: {ex.Message}");
+        }
+    }
+
+    private void ApplyPreset(PresetMix preset)
+    {
+        selectedSounds.Clear();
+        foreach (var soundName in preset.Sounds)
+        {
+            var sound = allSounds.FirstOrDefault(s => s.Name == soundName);
+            if (sound != null)
+            {
+                selectedSounds.Add(sound);
+            }
+        }
+    }
+
+    private void SelectDuration(int minutes)
+    {
+        selectedDuration = minutes;
+    }
+
+    private async Task StartSession()
+    {
+        if (!selectedSounds.Any()) return;
+
+        // Stop any preview
+        if (previewSound != null)
+        {
+            await JS.InvokeVoidAsync("stopTherapySound", previewSound.Name);
+            isPreviewPlaying = false;
+            previewSound = null;
+        }
+
+        sessionStarted = true;
+        isPaused = false;
+        showSummary = false;
+        elapsedSeconds = 0;
+        remainingSeconds = selectedDuration * 60;
+        
+        // Start all selected sounds
+        await JS.InvokeVoidAsync("initializeSoundTherapy");
+        foreach (var sound in selectedSounds)
+        {
+            await JS.InvokeVoidAsync("playTherapySound", sound.Name, sound.Volume);
+        }
+        
+        StartTimer();
+    }
+
+    private void StartTimer()
+    {
+        sessionTimer?.Stop();
+        sessionTimer?.Dispose();
+
+        sessionTimer = new System.Timers.Timer(1000);
+        sessionTimer.Elapsed += async (s, e) =>
+        {
+            if (isPaused) return;
+
+            elapsedSeconds++;
+            remainingSeconds--;
+
+            if (remainingSeconds <= 0)
+            {
+                await InvokeAsync(() => EndSession());
+            }
+
+            await InvokeAsync(StateHasChanged);
+        };
+        sessionTimer.Start();
+    }
+
+    private async Task UpdateVolume(SoundOption sound, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int volume))
+        {
+            sound.Volume = volume;
+            try
+            {
+                await JS.InvokeVoidAsync("updateSoundVolume", sound.Name, volume);
+            }
+            catch { }
+        }
+    }
+
+    private async Task TogglePause()
+    {
+        isPaused = !isPaused;
+        try
+        {
+            if (isPaused)
+            {
+                await JS.InvokeVoidAsync("pauseTherapySounds");
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("resumeTherapySounds");
+            }
+        }
+        catch { }
+    }
+
+    private async Task EndSession()
+    {
+        sessionTimer?.Stop();
+        sessionTimer?.Dispose();
+        
+        try
+        {
+            await JS.InvokeVoidAsync("stopAllTherapySounds");
+        }
+        catch { }
+        
+        await SaveActivitySession();
+        showSummary = true;
+        StateHasChanged();
+    }
+
+    private async Task SaveActivitySession()
+    {
+        try
+        {
+            var activityData = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                soundsUsed = selectedSounds.Select(s => s.Name).ToList(),
+                totalSounds = selectedSounds.Count,
+                plannedDurationMinutes = selectedDuration,
+                actualDurationSeconds = elapsedSeconds,
+                completedFully = remainingSeconds <= 0,
+                moodAfter = selectedMood
+            });
+
+            var request = new
+            {
+                userId = userId,
+                username = username,
+                activityType = "SoundTherapy",
+                activityName = "Sound Therapy",
+                durationSeconds = elapsedSeconds,
+                score = GetRelaxationScore(),
+                accuracy = 100m,
+                completionPercentage = GetRelaxationScore(),
+                difficulty = selectedDuration <= 10 ? "Easy" : selectedDuration <= 20 ? "Medium" : "Extended",
+                activityData = activityData,
+                moodBefore = "",
+                moodAfter = selectedMood
+            };
+
+            var apiUrl = $"{Navigation.BaseUri}api/activities/save";
+            await Http.PostAsJsonAsync(apiUrl, request);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving activity: {ex.Message}");
+        }
+    }
+
+    private void SelectMood(string mood)
+    {
+        selectedMood = mood;
+    }
+
+    private void ResetSession()
+    {
+        sessionStarted = false;
+        showSummary = false;
+        selectedSounds.Clear();
+        selectedMood = "";
+        elapsedSeconds = 0;
+        remainingSeconds = 0;
+    }
+
+    private string FormatTime(int seconds)
+    {
+        var mins = seconds / 60;
+        var secs = seconds % 60;
+        return $"{mins}:{secs:D2}";
+    }
+
+    private string GetPlayingSoundsText()
+    {
+        if (selectedSounds.Count == 1)
+            return selectedSounds[0].Name;
+        if (selectedSounds.Count == 2)
+            return $"{selectedSounds[0].Name} + {selectedSounds[1].Name}";
+        return $"{selectedSounds[0].Name} + {selectedSounds.Count - 1} more";
+    }
+
+    private string GetMoodEmoji()
+    {
+        return isPaused ? "⏸️" : "🎵";
+    }
+
+    private int GetRelaxationScore()
+    {
+        var plannedSeconds = selectedDuration * 60;
+        return plannedSeconds > 0 ? Math.Min(100, (int)((double)elapsedSeconds / plannedSeconds * 100)) : 0;
+    }
+
+    private double GetTimerOffset()
+    {
+        var plannedSeconds = selectedDuration * 60;
+        if (plannedSeconds <= 0) return 283;
+        var progress = (double)elapsedSeconds / plannedSeconds;
+        return 283 - (283 * progress);
+    }
+
+    private string GetWellnessTip()
+    {
+        var random = new Random();
+        return wellnessTips[random.Next(wellnessTips.Count)];
+    }
+
+    private async Task GoBack()
+    {
+        sessionTimer?.Stop();
+        sessionTimer?.Dispose();
+        
+        try
+        {
+            await JS.InvokeVoidAsync("stopAllTherapySounds");
+        }
+        catch { }
+        
+        Navigation.NavigateTo("/games");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        sessionTimer?.Stop();
+        sessionTimer?.Dispose();
+        
+        try
+        {
+            await JS.InvokeVoidAsync("stopAllTherapySounds");
+        }
+        catch { }
+    }
+}
+
+<style>
+    .activity-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    }
+
+    .activity-header {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+        padding: 1.5rem 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .back-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        border: 2px solid rgba(255,255,255,0.3);
+        background: rgba(255,255,255,0.1);
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        transition: all 200ms;
+    }
+
+    .back-btn:hover {
+        background: rgba(255,255,255,0.2);
+    }
+
+    .header-info {
+        flex-grow: 1;
+    }
+
+    .header-info h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .header-info p {
+        margin: 0.25rem 0 0;
+        opacity: 0.9;
+        font-size: 0.9rem;
+    }
+
+    .session-info {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .mix-badge {
+        background: rgba(255,255,255,0.2);
+        padding: 0.4rem 0.75rem;
+        border-radius: 8px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.875rem;
+    }
+
+    .session-time {
+        background: rgba(255,255,255,0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 10px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .sound-content {
+        max-width: 900px;
+        margin: 2rem auto;
+        padding: 0 1.5rem;
+    }
+
+    .start-screen {
+        background: white;
+        border-radius: 24px;
+        padding: 2.5rem;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+
+    .sound-icon {
+        width: 100px;
+        height: 100px;
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 3rem;
+        color: white;
+    }
+
+    .start-screen h2 {
+        margin: 0 0 0.5rem;
+        font-size: 2rem;
+        color: #1f2937;
+    }
+
+    .start-screen > p {
+        color: #6b7280;
+        margin-bottom: 2rem;
+    }
+
+    .category-tabs {
+        display: flex;
+        justify-content: center;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .category-tab {
+        padding: 0.75rem 1.25rem;
+        border-radius: 12px;
+        border: 2px solid #e5e7eb;
+        background: white;
+        color: #6b7280;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+        font-family: inherit;
+    }
+
+    .category-tab:hover {
+        border-color: #6366f1;
+        color: #6366f1;
+    }
+
+    .category-tab.active {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+        border-color: transparent;
+    }
+
+    /* Mix Preview Section */
+    .mix-preview {
+        background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+        border: 2px solid #c7d2fe;
+        border-radius: 16px;
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+        text-align: left;
+    }
+
+    .mix-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .mix-header h3 {
+        margin: 0;
+        color: #4338ca;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .clear-mix-btn {
+        background: transparent;
+        border: none;
+        color: #6366f1;
+        cursor: pointer;
+        font-size: 0.875rem;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-family: inherit;
+        padding: 0.35rem 0.75rem;
+        border-radius: 8px;
+        transition: all 200ms;
+    }
+
+    .clear-mix-btn:hover {
+        background: rgba(99, 102, 241, 0.1);
+    }
+
+    .mix-sounds {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .mix-sound-chip {
+        background: white;
+        border: 1px solid #c7d2fe;
+        border-radius: 20px;
+        padding: 0.4rem 0.5rem 0.4rem 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        color: #4338ca;
+    }
+
+    .mix-sound-chip i {
+        font-size: 1rem;
+    }
+
+    .remove-sound-btn {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: none;
+        background: #e5e7eb;
+        color: #6b7280;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        transition: all 200ms;
+    }
+
+    .remove-sound-btn:hover {
+        background: #ef4444;
+        color: white;
+    }
+
+    .mix-tip {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: #6366f1;
+        font-size: 0.8rem;
+    }
+
+    .mix-tip i {
+        color: #f59e0b;
+    }
+
+    .sound-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .sound-card {
+        background: #f9fafb;
+        border: 2px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 1.25rem;
+        cursor: pointer;
+        transition: all 200ms;
+        text-align: center;
+        position: relative;
+    }
+
+    .sound-card:hover {
+        border-color: #6366f1;
+        background: #eef2ff;
+        transform: translateY(-2px);
+    }
+
+    .sound-card.selected {
+        border-color: #6366f1;
+        background: #eef2ff;
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2);
+    }
+
+    .sound-visual {
+        position: relative;
+        width: 60px;
+        height: 60px;
+        margin: 0 auto 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .sound-visual i {
+        font-size: 2rem;
+        color: #6366f1;
+    }
+
+    .check-badge {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        width: 24px;
+        height: 24px;
+        background: #10b981;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 0.875rem;
+    }
+
+    .sound-card h3 {
+        margin: 0 0 0.25rem;
+        color: #1f2937;
+        font-size: 1rem;
+    }
+
+    .sound-card p {
+        margin: 0;
+        color: #9ca3af;
+        font-size: 0.75rem;
+    }
+
+    .preview-btn {
+        position: absolute;
+        bottom: 0.75rem;
+        right: 0.75rem;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: none;
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.875rem;
+        opacity: 0;
+        transition: all 200ms;
+    }
+
+    .sound-card:hover .preview-btn {
+        opacity: 1;
+    }
+
+    .preview-btn:hover {
+        transform: scale(1.1);
+    }
+
+    .sound-card.previewing {
+        animation: pulse-preview 1.5s infinite;
+    }
+
+    @@keyframes pulse-preview {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+        50% { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
+    }
+
+    .sound-card {
+        position: relative;
+    }
+
+    /* Preset Section */
+    .preset-section {
+        margin-bottom: 2rem;
+        text-align: left;
+    }
+
+    .preset-section h3 {
+        margin: 0 0 1rem;
+        color: #374151;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        justify-content: center;
+    }
+
+    .preset-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .preset-btn {
+        background: white;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1rem;
+        cursor: pointer;
+        transition: all 200ms;
+        font-family: inherit;
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .preset-btn:hover {
+        border-color: #6366f1;
+        background: #f8faff;
+        transform: translateY(-2px);
+    }
+
+    .preset-icon {
+        font-size: 1.75rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .preset-name {
+        font-weight: 600;
+        color: #1f2937;
+        font-size: 0.95rem;
+    }
+
+    .preset-desc {
+        color: #9ca3af;
+        font-size: 0.75rem;
+    }
+
+    .duration-section {
+        margin-bottom: 2rem;
+    }
+
+    .duration-section h3 {
+        margin: 0 0 1rem;
+        color: #374151;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .duration-options {
+        display: flex;
+        justify-content: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    .duration-btn {
+        padding: 0.75rem 1rem;
+        border-radius: 12px;
+        border: 2px solid #e5e7eb;
+        background: white;
+        cursor: pointer;
+        transition: all 200ms;
+        font-family: inherit;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 70px;
+    }
+
+    .duration-btn:hover {
+        border-color: #6366f1;
+    }
+
+    .duration-btn.active {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+        border-color: transparent;
+    }
+
+    .duration-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+
+    .duration-label {
+        font-size: 0.75rem;
+        opacity: 0.8;
+    }
+
+    .start-btn {
+        padding: 1rem 3rem;
+        font-size: 1.25rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+        border: none;
+        border-radius: 16px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        transition: all 300ms;
+        font-family: inherit;
+    }
+
+    .start-btn:hover:not(:disabled) {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 30px rgba(99, 102, 241, 0.4);
+    }
+
+    .start-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .hint-text {
+        color: #9ca3af;
+        font-size: 0.875rem;
+        margin-top: 1rem;
+    }
+
+    /* Playing Session Styles */
+    .playing-session {
+        text-align: center;
+    }
+
+    .session-visual {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        border-radius: 24px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        color: white;
+    }
+
+    .visualizer {
+        display: flex;
+        justify-content: center;
+        align-items: flex-end;
+        height: 80px;
+        gap: 4px;
+        margin-bottom: 1.5rem;
+    }
+
+    .bar {
+        width: 8px;
+        background: rgba(255,255,255,0.8);
+        border-radius: 4px;
+        height: 20px;
+    }
+
+    .bar.animate {
+        animation: visualize 1s ease-in-out infinite;
+    }
+
+    @@keyframes visualize {
+        0%, 100% { height: 20px; }
+        50% { height: 60px; }
+    }
+
+    .now-playing-info .playing-label {
+        font-size: 0.875rem;
+        opacity: 0.8;
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+
+    .now-playing-info h2 {
+        margin: 0;
+        font-size: 1.5rem;
+    }
+
+    .active-sounds {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .active-sound-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    }
+
+    .sound-icon-small {
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .sound-icon-small i {
+        font-size: 1.5rem;
+        color: #6366f1;
+    }
+
+    .sound-details {
+        flex-grow: 1;
+        text-align: left;
+    }
+
+    .sound-name {
+        font-weight: 600;
+        color: #1f2937;
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+
+    .volume-control {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .volume-control i {
+        color: #9ca3af;
+    }
+
+    .volume-control input[type="range"] {
+        flex-grow: 1;
+        height: 6px;
+        border-radius: 3px;
+        -webkit-appearance: none;
+        background: #e5e7eb;
+    }
+
+    .volume-control input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #6366f1;
+        cursor: pointer;
+    }
+
+    .timer-section {
+        margin-bottom: 2rem;
+    }
+
+    .timer-ring {
+        width: 180px;
+        height: 180px;
+        margin: 0 auto;
+        position: relative;
+    }
+
+    .timer-ring svg {
+        width: 100%;
+        height: 100%;
+        transform: rotate(-90deg);
+    }
+
+    .timer-bg {
+        fill: none;
+        stroke: #e5e7eb;
+        stroke-width: 8;
+    }
+
+    .timer-progress {
+        fill: none;
+        stroke: url(#timerGradient);
+        stroke: #6366f1;
+        stroke-width: 8;
+        stroke-linecap: round;
+        transition: stroke-dashoffset 1s linear;
+    }
+
+    .timer-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+    }
+
+    .time-remaining {
+        display: block;
+        font-size: 2rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .time-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .session-stats {
+        display: flex;
+        justify-content: center;
+        gap: 3rem;
+        margin-bottom: 2rem;
+        background: white;
+        padding: 1.5rem;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    }
+
+    .stat-item {
+        text-align: center;
+    }
+
+    .stat-item i {
+        font-size: 1.5rem;
+        color: #6366f1;
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-item .stat-value {
+        display: block;
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .stat-item .stat-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .control-buttons {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+    }
+
+    .control-btn {
+        padding: 1rem 2rem;
+        border-radius: 12px;
+        font-weight: 600;
+        font-family: inherit;
+        font-size: 1rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .control-btn.pause {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+        border: none;
+    }
+
+    .control-btn.pause:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(99, 102, 241, 0.3);
+    }
+
+    .control-btn.end {
+        background: white;
+        color: #6b7280;
+        border: 2px solid #e5e7eb;
+    }
+
+    .control-btn.end:hover {
+        border-color: #9ca3af;
+    }
+
+    /* Summary Styles */
+    .summary-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+        padding: 1rem;
+    }
+
+    .summary-card {
+        background: white;
+        border-radius: 24px;
+        padding: 2.5rem;
+        text-align: center;
+        max-width: 500px;
+        width: 100%;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .summary-icon {
+        width: 80px;
+        height: 80px;
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 2.5rem;
+        color: white;
+    }
+
+    .summary-card h2 {
+        margin: 0 0 0.5rem;
+        font-size: 1.75rem;
+        color: #1f2937;
+    }
+
+    .summary-card > p {
+        color: #6b7280;
+        margin-bottom: 2rem;
+    }
+
+    .summary-stats {
+        display: flex;
+        justify-content: center;
+        gap: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .summary-stat {
+        text-align: center;
+    }
+
+    .summary-stat .value {
+        display: block;
+        font-size: 2rem;
+        font-weight: 700;
+        color: #6366f1;
+    }
+
+    .summary-stat .label {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .mood-check {
+        margin-bottom: 1.5rem;
+    }
+
+    .mood-check h3 {
+        margin: 0 0 1rem;
+        color: #374151;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .mood-options {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .mood-btn {
+        padding: 0.5rem 1rem;
+        border-radius: 10px;
+        border: 2px solid #e5e7eb;
+        background: white;
+        cursor: pointer;
+        transition: all 200ms;
+        font-family: inherit;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .mood-btn:hover {
+        border-color: #6366f1;
+    }
+
+    .mood-btn.selected {
+        background: #eef2ff;
+        border-color: #6366f1;
+    }
+
+    .mood-emoji {
+        font-size: 1.5rem;
+    }
+
+    .mood-name {
+        font-size: 0.75rem;
+        color: #6b7280;
+    }
+
+    .wellness-tip {
+        background: #eef2ff;
+        padding: 1rem 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        text-align: left;
+    }
+
+    .wellness-tip i {
+        font-size: 1.5rem;
+        color: #6366f1;
+        flex-shrink: 0;
+    }
+
+    .wellness-tip span {
+        color: #4338ca;
+        font-size: 0.9rem;
+    }
+
+    .summary-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+    }
+
+    .action-btn {
+        padding: 1rem 2rem;
+        border-radius: 12px;
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .action-btn.primary {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+        border: none;
+    }
+
+    .action-btn.primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(99, 102, 241, 0.3);
+    }
+
+    .action-btn.secondary {
+        background: white;
+        border: 2px solid #e5e7eb;
+        color: #6b7280;
+    }
+
+    .action-btn.secondary:hover {
+        border-color: #9ca3af;
+    }
+
+    /* AI Curation Section */
+    .ai-curation-section {
+        background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+        border: 2px solid #d8b4fe;
+        border-radius: 20px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        text-align: left;
+    }
+
+    .ai-curation-section h3 {
+        margin: 0 0 0.5rem;
+        color: #7c3aed;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        justify-content: center;
+        font-size: 1.1rem;
+    }
+
+    .ai-badge {
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: white;
+        font-size: 0.65rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 6px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .ai-description {
+        color: #6b7280;
+        text-align: center;
+        margin-bottom: 1.25rem;
+        font-size: 0.9rem;
+    }
+
+    .ai-input-area {
+        background: white;
+        border-radius: 12px;
+        padding: 1rem;
+        border: 1px solid #e9d5ff;
+    }
+
+    .mood-quick-select {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        align-items: center;
+    }
+
+    .quick-label {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin-right: 0.25rem;
+    }
+
+    .quick-mood-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.4rem 0.75rem;
+        border-radius: 20px;
+        border: 1px solid #e9d5ff;
+        background: white;
+        color: #7c3aed;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: all 200ms;
+        font-family: inherit;
+    }
+
+    .quick-mood-btn:hover {
+        background: #f5f3ff;
+        border-color: #c4b5fd;
+    }
+
+    .quick-mood-btn.selected {
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: white;
+        border-color: transparent;
+    }
+
+    .ai-text-input {
+        margin-bottom: 1rem;
+    }
+
+    .ai-text-input textarea {
+        width: 100%;
+        padding: 0.75rem;
+        border: 2px solid #e9d5ff;
+        border-radius: 10px;
+        font-family: inherit;
+        font-size: 0.9rem;
+        resize: none;
+        transition: border-color 200ms;
+    }
+
+    .ai-text-input textarea:focus {
+        outline: none;
+        border-color: #8b5cf6;
+    }
+
+    .ai-curate-btn {
+        width: 100%;
+        padding: 0.9rem;
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 1rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+        font-family: inherit;
+    }
+
+    .ai-curate-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(124, 58, 237, 0.35);
+    }
+
+    .ai-curate-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .spinning {
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    /* AI Result Card */
+    .ai-result-card {
+        margin-top: 1.25rem;
+        background: white;
+        border-radius: 16px;
+        padding: 1.25rem;
+        border: 2px solid #c4b5fd;
+        box-shadow: 0 4px 20px rgba(124, 58, 237, 0.1);
+    }
+
+    .ai-result-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .ai-avatar {
+        width: 44px;
+        height: 44px;
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.25rem;
+    }
+
+    .ai-result-title h4 {
+        margin: 0;
+        color: #1f2937;
+        font-size: 1.1rem;
+    }
+
+    .ai-source {
+        font-size: 0.75rem;
+        color: #8b5cf6;
+    }
+
+    .ai-explanation {
+        color: #4b5563;
+        font-size: 0.9rem;
+        margin-bottom: 1rem;
+        line-height: 1.5;
+    }
+
+    .ai-recommended-sounds {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .ai-sound-chip {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 0.75rem;
+        background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+        border-radius: 20px;
+        color: #7c3aed;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    .ai-sound-chip i {
+        font-size: 1rem;
+    }
+
+    .sound-volume {
+        background: rgba(124, 58, 237, 0.15);
+        padding: 0.15rem 0.4rem;
+        border-radius: 8px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+
+    .ai-wellness-tip {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        display: flex;
+        align-items: flex-start;
+        gap: 0.6rem;
+        margin-bottom: 1rem;
+    }
+
+    .ai-wellness-tip i {
+        color: #f59e0b;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+
+    .ai-wellness-tip span {
+        color: #92400e;
+        font-size: 0.85rem;
+        line-height: 1.4;
+    }
+
+    .ai-result-actions {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .apply-ai-btn {
+        flex: 1;
+        padding: 0.75rem;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+        transition: all 200ms;
+        font-family: inherit;
+    }
+
+    .apply-ai-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.3);
+    }
+
+    .try-another-btn {
+        padding: 0.75rem 1rem;
+        background: white;
+        color: #6b7280;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        transition: all 200ms;
+        font-family: inherit;
+    }
+
+    .try-another-btn:hover {
+        border-color: #9ca3af;
+    }
+
+    .ai-error {
+        margin-top: 1rem;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #dc2626;
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.9rem;
+    }
+
+    @@media (max-width: 640px) {
+        .sound-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .session-stats {
+            gap: 1.5rem;
+            padding: 1rem;
+        }
+
+        .control-buttons {
+            flex-direction: column;
+        }
+
+        .summary-actions {
+            flex-direction: column;
+        }
+        
+        .ai-result-actions {
+            flex-direction: column;
+        }
+        
+        .mood-quick-select {
+            justify-content: center;
+        }
+    }
+</style>

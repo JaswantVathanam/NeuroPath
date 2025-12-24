@@ -1,0 +1,207 @@
+is_global = true
+build_property.TargetFramework = net10.0
+build_property.TargetFramework = net10.0
+build_property.TargetPlatformMinVersion = 
+build_property.TargetPlatformMinVersion = 
+build_property.UsingMicrosoftNETSdkWeb = true
+build_property.UsingMicrosoftNETSdkWeb = true
+build_property.ProjectTypeGuids = 
+build_property.ProjectTypeGuids = 
+build_property.InvariantGlobalization = 
+build_property.InvariantGlobalization = 
+build_property.PlatformNeutralAssembly = 
+build_property.PlatformNeutralAssembly = 
+build_property.EnforceExtendedAnalyzerRules = 
+build_property.EnforceExtendedAnalyzerRules = 
+build_property._SupportedPlatformList = Linux,macOS,Windows
+build_property._SupportedPlatformList = Linux,macOS,Windows
+build_property.TargetFrameworkIdentifier = .NETCoreApp
+build_property.TargetFrameworkVersion = v10.0
+build_property.RootNamespace = Adaptive Cognitive Rehabilitation Platform
+build_property.RootNamespace = Adaptive Cognitive Rehabilitation Platform
+build_property.ProjectDir = D:\VS Code Projects\CogRehab\Adaptive Cognitive Rehabilitation Platform\
+build_property.EnableComHosting = 
+build_property.EnableGeneratedComInterfaceComImportInterop = 
+build_property.RazorLangVersion = 9.0
+build_property.SupportLocalizedComponentNames = 
+build_property.GenerateRazorMetadataSourceChecksumAttributes = 
+build_property.MSBuildProjectDirectory = D:\VS Code Projects\CogRehab\Adaptive Cognitive Rehabilitation Platform
+build_property._RazorSourceGeneratorDebug = 
+build_property.EffectiveAnalysisLevelStyle = 10.0
+build_property.EnableCodeStyleSeverity = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/App.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xBcHAucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/GameResultsComponent.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xHYW1lUmVzdWx0c0NvbXBvbmVudC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Instructor/Dashboard.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xJbnN0cnVjdG9yXERhc2hib2FyZC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Layout/NavBar.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xMYXlvdXRcTmF2QmFyLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/LoadingIndicator.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xMb2FkaW5nSW5kaWNhdG9yLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/About.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xBYm91dC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Activities/BreathingExercise.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xBY3Rpdml0aWVzXEJyZWF0aGluZ0V4ZXJjaXNlLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Activities/DailyJournal.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xBY3Rpdml0aWVzXERhaWx5Sm91cm5hbC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Activities/FocusTracker.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xBY3Rpdml0aWVzXEZvY3VzVHJhY2tlci5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Activities/MentalMath.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xBY3Rpdml0aWVzXE1lbnRhbE1hdGgucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Activities/NumberSequence.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xBY3Rpdml0aWVzXE51bWJlclNlcXVlbmNlLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Activities/SoundTherapy.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xBY3Rpdml0aWVzXFNvdW5kVGhlcmFweS5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Activities/StoryRecall.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xBY3Rpdml0aWVzXFN0b3J5UmVjYWxsLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Activities/WordAssociation.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xBY3Rpdml0aWVzXFdvcmRBc3NvY2lhdGlvbi5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Activities/WordPuzzles.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xBY3Rpdml0aWVzXFdvcmRQdXp6bGVzLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/ChildProgress.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xDaGlsZFByb2dyZXNzLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/GamesList.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xHYW1lc0xpc3QucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Games/DualTask.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xHYW1lc1xEdWFsVGFzay5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Games/MemoryMatch.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xHYW1lc1xNZW1vcnlNYXRjaC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Games/PatternCopy.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xHYW1lc1xQYXR0ZXJuQ29weS5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Games/ReactionTrainer.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xHYW1lc1xSZWFjdGlvblRyYWluZXIucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Games/SortingTask.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xHYW1lc1xTb3J0aW5nVGFzay5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Games/StroopTest.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xHYW1lc1xTdHJvb3BUZXN0LnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Games/TrailMaking.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xHYW1lc1xUcmFpbE1ha2luZy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Home.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xIb21lLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Login.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xMb2dpbi5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/MyChildren.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xNeUNoaWxkcmVuLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/ParentAnalytics.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xQYXJlbnRBbmFseXRpY3MucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Progress.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xQcm9ncmVzcy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Settings.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xTZXR0aW5ncy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Statistics.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xTdGF0aXN0aWNzLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Support.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xTdXBwb3J0LnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Therapist/Analytics.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xUaGVyYXBpc3RcQW5hbHl0aWNzLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Therapist/Dashboard.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xUaGVyYXBpc3RcRGFzaGJvYXJkLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/Therapist/PatientDetail.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xUaGVyYXBpc3RcUGF0aWVudERldGFpbC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Parent/Dashboard.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYXJlbnRcRGFzaGJvYXJkLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Routes.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xSb3V0ZXMucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/User/Dashboard.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xVc2VyXERhc2hib2FyZC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/_Imports.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xfSW1wb3J0cy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Pages/Login.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcTG9naW4ucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Pages/_Imports.razor]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcX0ltcG9ydHMucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Layout/MainLayout.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xMYXlvdXRcTWFpbkxheW91dC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = b-7qdbwvxqzf
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Layout/NavMenu.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xMYXlvdXRcTmF2TWVudS5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = b-tl5ogdxhi7
+
+[D:/VS Code Projects/CogRehab/Adaptive Cognitive Rehabilitation Platform/Components/Pages/TherapistDashboard.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50c1xQYWdlc1xUaGVyYXBpc3REYXNoYm9hcmQucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = b-4jxyhmfv1q

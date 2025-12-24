@@ -1,0 +1,372 @@
+@page "/login"
+@rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+
+<div class="login-container">
+    <div class="login-card">
+        <!-- Logo & Header -->
+        <div class="login-header">
+            <div class="logo">🧠</div>
+            <h1>NeuroPath</h1>
+            <p class="tagline">Cognitive Rehabilitation Platform</p>
+        </div>
+
+        <!-- Login Form -->
+        <EditForm Model="@loginModel" OnValidSubmit="@HandleLogin" FormName="LoginForm" class="login-form">
+            <DataAnnotationsValidator />
+
+            <!-- Error Message -->
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <strong>Login Failed</strong>
+                    <p>@errorMessage</p>
+                    <button type="button" class="btn-close" @onclick="@(() => errorMessage = "")" aria-label="Close"></button>
+                </div>
+            }
+
+            <!-- Success Message -->
+            @if (isLoading && !string.IsNullOrEmpty(loginModel.Username))
+            {
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <strong>✅ Welcome back, @loginModel.Username!</strong>
+                    <p>Redirecting you to your dashboard...</p>
+                </div>
+            }
+
+            <!-- Username -->
+            <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <InputText 
+                    id="username" 
+                    @bind-Value="loginModel.Username" 
+                    class="form-control form-control-lg"
+                    placeholder="Enter your username"
+                    disabled="@isLoading" />
+                <ValidationMessage For="@(() => loginModel.Username)" class="text-danger small mt-1" />
+            </div>
+
+            <!-- Password -->
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input 
+                    type="password"
+                    id="password" 
+                    @bind="loginModel.Password" 
+                    class="form-control form-control-lg"
+                    placeholder="Enter your password"
+                    disabled="@isLoading" />
+                <ValidationMessage For="@(() => loginModel.Password)" class="text-danger small mt-1" />
+            </div>
+
+            <!-- Remember Me -->
+            <div class="mb-3 form-check">
+                <input 
+                    type="checkbox"
+                    id="rememberMe" 
+                    @bind="loginModel.RememberMe" 
+                    class="form-check-input" />
+                <label for="rememberMe" class="form-check-label">
+                    Remember me for 30 days
+                </label>
+            </div>
+
+            <!-- Login Button -->
+            <button type="submit" class="btn btn-primary btn-lg w-100" disabled="@isLoading">
+                @if (isLoading)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    <span>Signing In...</span>
+                }
+                else
+                {
+                    <span>Sign In</span>
+                }
+            </button>
+
+            <!-- Forgot Password Link -->
+            <div class="text-center mt-3">
+                <a href="#" class="text-decoration-none text-muted small">Forgot your password?</a>
+            </div>
+        </EditForm>
+
+        <!-- Footer -->
+        <div class="login-footer">
+            <p class="text-muted small">
+                <strong>Demo Users:</strong><br />
+                jaswant.b / Jasw@nt2024<br />
+                rishika.p / R1sh!ka2024<br />
+                bhuvanan.p / Bhuv@n2024<br />
+                mariyam.sa / M@riyam2024<br /><br />
+                <strong>Therapist:</strong><br />
+                rajasekaran.m / R@jasek2024
+            </p>
+        </div>
+    </div>
+</div>
+
+@code {
+    private LoginModel loginModel = new();
+    private string errorMessage = "";
+    private bool isLoading = false;
+
+    public class LoginModel
+    {
+        [Required(ErrorMessage = "Username is required")]
+        [StringLength(50, MinimumLength = 3, ErrorMessage = "Username must be between 3 and 50 characters")]
+        public string Username { get; set; } = "";
+
+        [Required(ErrorMessage = "Password is required")]
+        [StringLength(100, MinimumLength = 6, ErrorMessage = "Password must be at least 6 characters")]
+        public string Password { get; set; } = "";
+
+        public bool RememberMe { get; set; } = false;
+    }
+
+    private bool hasCheckedAuth = false;
+
+    // Avoid calling JS interop during prerender. Defer localStorage checks to OnAfterRenderAsync
+    // where JS interop is available. Use firstRender guard so this runs only once.
+    protected override Task OnInitializedAsync()
+    {
+        // Intentionally left empty to avoid JS interop during prerender
+        return Task.CompletedTask;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !hasCheckedAuth)
+        {
+            hasCheckedAuth = true;
+            try
+            {
+                var token = await JS.InvokeAsync<string>("localStorage.getItem", "authToken");
+                if (!string.IsNullOrEmpty(token))
+                {
+                    NavigationManager.NavigateTo("/");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error checking auth: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = "";
+
+            var request = new
+            {
+                username = loginModel.Username,
+                password = loginModel.Password
+            };
+
+            // Use JSON-based authentication API
+            var apiUrl = $"{NavigationManager.BaseUri}api/json-auth/login";
+            var response = await HttpClient.PostAsJsonAsync(apiUrl, request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
+
+                if (result != null && result.Success)
+                {
+                    // Store JWT token using JS Interop
+                    await JS.InvokeVoidAsync("localStorage.setItem", "authToken", result.Token);
+                    await JS.InvokeVoidAsync("localStorage.setItem", "userId", result.User.UserId.ToString());
+                    await JS.InvokeVoidAsync("localStorage.setItem", "userRole", result.User.UserType);
+                    await JS.InvokeVoidAsync("localStorage.setItem", "username", result.User.Username);
+                    await JS.InvokeVoidAsync("localStorage.setItem", "fullName", result.User.FullName);
+
+                    // Remember me (store for 30 days)
+                    if (loginModel.RememberMe)
+                    {
+                        await JS.InvokeVoidAsync("localStorage.setItem", "rememberMe", "true");
+                        await JS.InvokeVoidAsync("localStorage.setItem", "rememberMeExpiry", DateTime.UtcNow.AddDays(30).ToString("O"));
+                    }
+
+                    // Show success message briefly before redirect
+                    await Task.Delay(800);
+
+                    // Redirect based on role
+                    var dashboardUrl = result.User.UserType switch
+                    {
+                        "Therapist" => "/therapist-dashboard",
+                        "Parent" => "/parent-dashboard",
+                        "User" => "/progress",
+                        _ => "/"
+                    };
+
+                    NavigationManager.NavigateTo(dashboardUrl, forceLoad: false);
+                }
+                else
+                {
+                    errorMessage = result?.Message ?? "Login failed. Please check your credentials.";
+                }
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                errorMessage = errorContent?.Error ?? "Login failed. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    public class LoginResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = "";
+        public string Token { get; set; } = "";
+        public UserDto User { get; set; } = new();
+    }
+
+    public class UserDto
+    {
+        public int UserId { get; set; }
+        public string Username { get; set; } = "";
+        public string FullName { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string UserType { get; set; } = "";
+        public bool IsActive { get; set; }
+    }
+
+    public class ErrorResponse
+    {
+        public string Error { get; set; } = "";
+    }
+}
+
+<style>
+.login-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.login-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    width: 100%;
+    max-width: 420px;
+    padding: 40px;
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+.logo {
+    font-size: 48px;
+    margin-bottom: 15px;
+}
+
+.login-header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: #2c3e50;
+    margin: 0 0 5px 0;
+}
+
+.tagline {
+    color: #95a5a6;
+    font-size: 14px;
+    margin: 0;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-control-lg {
+    padding: 12px 16px;
+    font-size: 16px;
+    border: 2px solid #ecf0f1;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.form-control-lg:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    font-weight: 600;
+    margin-top: 10px;
+    transition: all 0.3s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.btn-primary:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.alert {
+    border-radius: 6px;
+    margin-bottom: 20px;
+    border: none;
+}
+
+.alert-danger {
+    background-color: #fee;
+    color: #c33;
+}
+
+.login-footer {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid #ecf0f1;
+    text-align: center;
+}
+
+.login-footer p {
+    margin: 0;
+    line-height: 1.6;
+}
+
+@@media (max-width: 480px) {
+    .login-card {
+        margin: 20px;
+        padding: 30px 20px;
+    }
+
+    .login-header h1 {
+        font-size: 24px;
+    }
+
+    .logo {
+        font-size: 40px;
+    }
+}
+</style>

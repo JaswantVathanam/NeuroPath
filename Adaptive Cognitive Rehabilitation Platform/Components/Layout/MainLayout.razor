@@ -1,0 +1,159 @@
+@inherits LayoutComponentBase
+
+<div class="layout-wrapper">
+    <!-- Modern Navigation Bar -->
+    <NavBar />
+
+
+    <div class="page-layout">
+        <!-- Main Content -->
+        <main role="main" class="main-content">
+            @Body
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="container">
+                <div class="footer-content">
+                    <p>&copy; 2025 NeuroPath - Cognitive Rehabilitation Platform with AI</p>
+                    <p>Designed with care for your recovery journey. Powered by Phi-4 AI.</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+</div>
+
+<style>
+    /* Hidden by default - only shows on actual error */
+    #blazor-error-ui {
+        display: none;
+    }
+
+    /* Footer Styles */
+    .footer {
+        background-color: var(--gray-800);
+        color: white;
+        padding: var(--spacing-3xl) var(--spacing-lg);
+        margin-top: var(--spacing-3xl);
+        border-top: 1px solid var(--gray-700);
+    }
+
+    .footer-content {
+        text-align: center;
+    }
+
+    .footer-content p {
+        color: var(--gray-300);
+        margin-bottom: var(--spacing-sm);
+        font-size: 0.95rem;
+    }
+
+    /* Alert Error */
+    .alert-error {
+        background-color: var(--danger);
+        color: white;
+        padding: var(--spacing-lg);
+        border-radius: var(--radius-lg);
+        margin: var(--spacing-lg);
+    }
+
+    .alert-error h2 {
+        color: white;
+        margin-bottom: var(--spacing-md);
+    }
+
+    .dismiss {
+        cursor: pointer;
+        float: right;
+        font-size: 1.5rem;
+        font-weight: bold;
+    }
+
+    .dismiss:hover {
+        opacity: 0.7;
+    }
+
+    /* Page Layout */
+    .page-layout {
+        min-height: calc(100vh - 120px);
+    }
+</style>
+
+<style>
+    /* Responsive */
+    @@media (max-width: 768px) {
+        .navbar-nav {
+            display: none;
+        }
+
+        .navbar-actions {
+            flex: 1;
+            justify-content: flex-end;
+        }
+
+        .footer {
+            padding: var(--spacing-2xl) var(--spacing-md);
+        }
+    }
+
+    /* Error UI - Hidden by default */
+    #blazor-error-ui {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #blazor-error-ui.show {
+        display: flex;
+    }
+
+    #blazor-error-ui .alert-error {
+        background-color: var(--danger);
+        color: white;
+        padding: var(--spacing-2xl);
+        border-radius: var(--radius-lg);
+        max-width: 500px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    #blazor-error-ui .alert-error h2 {
+        color: white;
+        margin-bottom: var(--spacing-md);
+        font-size: 1.5rem;
+    }
+
+    #blazor-error-ui .alert-error p {
+        margin: 0 0 var(--spacing-md) 0;
+        line-height: 1.5;
+    }
+
+    #blazor-error-ui .dismiss {
+        cursor: pointer;
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: white;
+        background: none;
+        border: none;
+        padding: 0;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #blazor-error-ui .dismiss:hover {
+        opacity: 0.7;
+    }
+</style>

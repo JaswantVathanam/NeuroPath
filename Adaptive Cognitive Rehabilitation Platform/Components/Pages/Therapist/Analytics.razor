@@ -1,0 +1,397 @@
+@page "/therapist-analytics"
+@using NeuroPath.Models
+@using Microsoft.JSInterop
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+
+<div class="container-fluid p-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-0"><i class="bi bi-graph-up"></i> Analytics Dashboard</h1>
+            <small class="text-muted">Comprehensive progress tracking and therapy insights</small>
+        </div>
+        <div>
+            <button class="btn btn-primary" @onclick="RefreshData">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="alert alert-info" role="alert">
+            <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
+            Loading analytics data...
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-circle"></i> <strong>Error:</strong> @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    <!-- Summary Cards -->
+    @if (summary != null && !isLoading)
+    {
+        <div class="row mb-4">
+            <div class="col-md-3 mb-3">
+                <div class="card text-white bg-primary shadow-sm">
+                    <div class="card-body text-center">
+                        <h3 class="card-title mb-0">@summary.TotalPatients</h3>
+                        <small class="text-white-50"><i class="bi bi-people-fill"></i> Total Patients</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card text-white bg-success shadow-sm">
+                    <div class="card-body text-center">
+                        <h3 class="card-title mb-0">@summary.TotalSessionsThisWeek</h3>
+                        <small class="text-white-50"><i class="bi bi-hourglass-split"></i> Sessions This Week</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card text-white bg-info shadow-sm">
+                    <div class="card-body text-center">
+                        <h3 class="card-title mb-0">@summary.AverageAccuracyAll.ToString("F1")%</h3>
+                        <small class="text-white-50"><i class="bi bi-percent"></i> Avg Accuracy</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card text-white bg-warning shadow-sm">
+                    <div class="card-body text-center">
+                        <h3 class="card-title mb-0">@summary.AverageScoreAll</h3>
+                        <small class="text-white-50"><i class="bi bi-award"></i> Avg Score</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Filters -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input type="text" class="form-control" placeholder="Search patient..." @bind="searchText" @oninput="FilterPatients" />
+            </div>
+        </div>
+        <div class="col-md-4">
+            <select class="form-select" @bind="filterGameType">
+                <option value="">All Game Types</option>
+                <option value="PatternMatching">Pattern Matching</option>
+                <option value="MemoryChallenge">Memory Challenge</option>
+                <option value="SpeedChallenge">Speed Challenge</option>
+                <option value="ColorIdentification">Color Identification</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <select class="form-select" @bind="filterDateRange">
+                <option value="7">Last 7 Days</option>
+                <option value="30">Last 30 Days</option>
+                <option value="90">Last 90 Days</option>
+                <option value="0">All Time</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Patient Performance Table -->
+    @if (filteredPatients != null && filteredPatients.Count > 0)
+    {
+        <div class="card shadow-sm">
+            <div class="card-header bg-light">
+                <h5 class="card-title mb-0"><i class="bi bi-hospital"></i> Patient Performance</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th><i class="bi bi-person-circle"></i> Patient</th>
+                            <th><i class="bi bi-check-circle"></i> Sessions</th>
+                            <th><i class="bi bi-award"></i> Avg Score</th>
+                            <th><i class="bi bi-bullseye"></i> Best Score</th>
+                            <th><i class="bi bi-percent"></i> Accuracy</th>
+                            <th><i class="bi bi-arrow-repeat"></i> Progress</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var patient in filteredPatients)
+                        {
+                            <tr>
+                                <td><strong>@patient.Name</strong><br /><small class="text-muted">@patient.AgeGroup</small></td>
+                                <td><span class="badge bg-info">@patient.SessionsCompleted</span></td>
+                                <td><span class="badge bg-warning text-dark">@patient.AverageScore</span></td>
+                                <td><span class="badge bg-success">@patient.BestScore</span></td>
+                                <td><span class="badge bg-secondary">@patient.AverageAccuracy.ToString("F1")%</span></td>
+                                <td>
+                                    @if (patient.TrendDirection == "up")
+                                    {
+                                        <span class="badge bg-success"><i class="bi bi-arrow-up"></i> Improving</span>
+                                    }
+                                    else if (patient.TrendDirection == "down")
+                                    {
+                                        <span class="badge bg-danger"><i class="bi bi-arrow-down"></i> Declining</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary"><i class="bi bi-dash"></i> Stable</span>
+                                    }
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => ViewPatientDetails(patient.PatientId)">
+                                        <i class="bi bi-eye"></i> View
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+    else if (!isLoading && (filteredPatients == null || filteredPatients.Count == 0))
+    {
+        <div class="alert alert-warning" role="alert">
+            <i class="bi bi-exclamation-triangle"></i> No patients found matching your filters.
+        </div>
+    }
+
+    <!-- Game Type Breakdown -->
+    @if (gameTypeStats != null && gameTypeStats.Count > 0)
+    {
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-light">
+                        <h5 class="card-title mb-0"><i class="bi bi-hospital"></i> Sessions by Game Type</h5>
+                    </div>
+                    <div class="card-body">
+                        @foreach (var gameType in gameTypeStats)
+                        {
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <strong>@gameType.Key</strong>
+                                    <span class="badge bg-primary">@gameType.Value sessions</span>
+                                </div>
+                                <div class="progress" role="progressbar" style="height: 20px;">
+                                    <div class="progress-bar" style="width: @((gameType.Value * 100 / gameTypeStats.Values.Sum()))%"></div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-light">
+                        <h5 class="card-title mb-0"><i class="bi bi-activity"></i> Key Metrics</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (summary != null)
+                        {
+                            <div class="row mb-3">
+                                <div class="col-sm-6">
+                                    <strong>Total Play Time:</strong><br />
+                                    <span class="text-muted">@FormatPlayTime(summary.TotalPlayTimeMinutes)</span>
+                                </div>
+                                <div class="col-sm-6">
+                                    <strong>Session Completion Rate:</strong><br />
+                                    <span class="text-muted">@summary.SessionCompletionRate.ToString("F1")%</span>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-sm-6">
+                                    <strong>Top Performing Game:</strong><br />
+                                    <span class="text-muted">@summary.TopPerformingGame</span>
+                                </div>
+                                <div class="col-sm-6">
+                                    <strong>Most Played Game:</strong><br />
+                                    <span class="text-muted">@summary.MostPlayedGame</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isLoading = true;
+    private string? errorMessage;
+    private string searchText = "";
+    private string filterGameType = "";
+    private int filterDateRange = 7;
+
+    private AnalyticsSummaryDto? summary;
+    private List<PatientPerformanceDto>? patients;
+    private List<PatientPerformanceDto>? filteredPatients;
+    private Dictionary<string, int> gameTypeStats = new();
+    private bool hasInitialized = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (!firstRender || hasInitialized)
+            {
+                return;
+            }
+
+            hasInitialized = true;
+            
+            await LoadAnalyticsData();
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+
+    private async Task LoadAnalyticsData()
+    {
+        try
+        {
+            isLoading = true;
+
+            var baseUrl = NavigationManager.BaseUri;
+            var response = await Http.GetAsync($"{baseUrl}api/therapist/analytics");
+
+            if (response.IsSuccessStatusCode)
+            {
+                summary = await response.Content.ReadFromJsonAsync<AnalyticsSummaryDto>();
+                
+                if (summary != null)
+                {
+                    // Build game type stats from the response
+                    gameTypeStats = new Dictionary<string, int>();
+                    
+                    // Load patients from the main endpoint to get performance data
+                    var patientsResponse = await Http.GetAsync($"{baseUrl}api/therapist/patients");
+                    if (patientsResponse.IsSuccessStatusCode)
+                    {
+                        var patientList = await patientsResponse.Content.ReadFromJsonAsync<List<dynamic>>();
+                        if (patientList != null)
+                        {
+                            patients = new List<PatientPerformanceDto>();
+                            
+                            foreach (var p in patientList)
+                            {
+                                var statsResponse = await Http.GetAsync($"{baseUrl}api/therapist/patient/{p.UserId}/progress");
+                                if (statsResponse.IsSuccessStatusCode)
+                                {
+                                    var stats = await statsResponse.Content.ReadFromJsonAsync<dynamic>();
+                                    if (stats != null)
+                                    {
+                                        patients.Add(new PatientPerformanceDto
+                                        {
+                                            PatientId = p.UserId,
+                                            Name = p.FirstName ?? "Unknown",
+                                            AgeGroup = p.AgeGroup ?? "Unknown",
+                                            SessionsCompleted = stats.TotalSessionsCompleted ?? 0,
+                                            AverageScore = stats.AverageScore ?? 0,
+                                            BestScore = stats.BestScore ?? 0,
+                                            AverageAccuracy = stats.AverageAccuracy ?? 0
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    filteredPatients = patients ?? new List<PatientPerformanceDto>();
+                }
+            }
+            else
+            {
+                errorMessage = $"Failed to load analytics: {response.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading analytics: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadAnalyticsData();
+    }
+
+    private void FilterPatients()
+    {
+        if (patients == null)
+            return;
+
+        filteredPatients = patients
+            .Where(p => string.IsNullOrEmpty(searchText) || 
+                   p.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+            .Where(p => string.IsNullOrEmpty(filterGameType) || p.LastPlayedGame == filterGameType)
+            .ToList();
+    }
+
+    private void FilterByGameType()
+    {
+        FilterPatients();
+    }
+
+    private void FilterByDateRange()
+    {
+        // TODO: Re-filter based on date range
+        FilterPatients();
+    }
+
+    private void ViewPatientDetails(int patientId)
+    {
+        NavigationManager.NavigateTo($"/therapist-patient/{patientId}");
+    }
+
+    private string FormatPlayTime(long minutes)
+    {
+        if (minutes < 60)
+            return $"{minutes} min";
+        else
+        {
+            var hours = minutes / 60;
+            var mins = minutes % 60;
+            return $"{hours}h {mins}m";
+        }
+    }
+
+    public class AnalyticsSummaryDto
+    {
+        public int TotalPatients { get; set; }
+        public int TotalSessionsThisWeek { get; set; }
+        public decimal AverageAccuracyAll { get; set; }
+        public int AverageScoreAll { get; set; }
+        public decimal SessionCompletionRate { get; set; }
+        public long TotalPlayTimeMinutes { get; set; }
+        public string TopPerformingGame { get; set; } = "";
+        public string MostPlayedGame { get; set; } = "";
+    }
+
+    public class PatientPerformanceDto
+    {
+        public int PatientId { get; set; }
+        public string Name { get; set; } = "";
+        public string AgeGroup { get; set; } = "";
+        public int SessionsCompleted { get; set; }
+        public int AverageScore { get; set; }
+        public int BestScore { get; set; }
+        public decimal AverageAccuracy { get; set; }
+        public string TrendDirection { get; set; } = "stable"; // "up", "down", "stable"
+        public string LastPlayedGame { get; set; } = "";
+    }
+}

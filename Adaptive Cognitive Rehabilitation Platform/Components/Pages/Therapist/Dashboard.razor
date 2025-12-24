@@ -1,0 +1,510 @@
+@* OLD DASHBOARD - Replaced by Components/Pages/TherapistDashboard.razor *@
+@page "/therapist-dashboard-old"
+@using NeuroPath.Models
+@using NeuroPath.Models.DTOs
+@using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Components.Web
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+@inject ILogger<TherapistDashboard> Logger
+
+<div class="container-fluid p-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-0"><i class="bi bi-person-heart"></i> Therapist Dashboard</h1>
+            <small class="text-muted">Manage and monitor your patients' rehabilitation progress</small>
+        </div>
+        <div>
+            <button class="btn btn-primary" @onclick="RefreshData">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="alert alert-info" role="alert">
+            <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
+            Loading your patients' progress...
+        </div>
+    }
+    
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-circle"></i> <strong>Error:</strong> @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    @if (patients != null && patients.Count > 0)
+    {
+        <div class="row">
+            @foreach (var patient in patients)
+            {
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="card-title mb-0">@patient.FirstName @patient.LastName</h5>
+                            <small class="text-white-50">Age: @patient.AgeGroup | UserId: @patient.UserId</small>
+                        </div>
+                        <div class="card-body">
+                            @if (patientStats.TryGetValue(patient.UserId, out var stats))
+                            {
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span><strong><i class="bi bi-check-circle"></i> Sessions Completed</strong></span>
+                                        <span class="badge bg-info">@stats.TotalSessionsCompleted</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span><strong><i class="bi bi-graph-up"></i> Average Score</strong></span>
+                                        <span class="badge bg-success">@stats.AverageScore</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span><strong><i class="bi bi-award"></i> Best Score</strong></span>
+                                        <span class="badge bg-warning text-dark">@stats.BestScore</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span><strong><i class="bi bi-bullseye"></i> Average Accuracy</strong></span>
+                                        <span class="badge bg-secondary">@stats.AverageAccuracy.ToString("F1")%</span>
+                                    </div>
+                                </div>
+
+                                @if (stats.GameTypes != null && stats.GameTypes.Count > 0)
+                                {
+                                    <div class="mt-3 pt-3 border-top">
+                                        <h6 class="mb-2"><i class="bi bi-hospital"></i> Therapy Breakdown</h6>
+                                        @foreach (var gameType in stats.GameTypes)
+                                        {
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <span>@gameType.Key</span>
+                                                <span class="badge bg-light text-dark">@gameType.Value sessions</span>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <p class="text-muted text-center"><i class="bi bi-hourglass-split"></i> No activity yet</p>
+                            }
+                        </div>
+                        <div class="card-footer">
+                            <div class="btn-group w-100" role="group">
+                                <button class="btn btn-sm btn-info" @onclick="() => ViewPatientDetails(patient.UserId)">
+                                    <i class="bi bi-eye"></i> Details
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => OpenNotesModal(patient.UserId, patient.FirstName)">
+                                    <i class="bi bi-file-text"></i> Notes
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Recent Game Sessions Section -->
+        <div class="mt-5">
+            <div class="d-flex align-items-center mb-4">
+                <h2 class="mb-0"><i class="bi bi-controller"></i> Recent Game Sessions</h2>
+                <span class="badge bg-info ms-3">@(recentGameSessions?.Count ?? 0) sessions</span>
+            </div>
+
+            @if (recentGameSessions != null && recentGameSessions.Count > 0)
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover shadow-sm">
+                        <thead class="table-light">
+                            <tr>
+                                <th><i class="bi bi-person"></i> Patient</th>
+                                <th><i class="bi bi-hospital"></i> Game Type</th>
+                                <th><i class="bi bi-star"></i> Score</th>
+                                <th><i class="bi bi-bullseye"></i> Accuracy</th>
+                                <th><i class="bi bi-hourglass"></i> Time</th>
+                                <th><i class="bi bi-arrow-up"></i> Recommendation</th>
+                                <th><i class="bi bi-calendar"></i> Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var session in recentGameSessions)
+                            {
+                                <tr>
+                                    <td><strong>@session.PatientName</strong></td>
+                                    <td>
+                                        <span class="badge bg-primary">@session.GameType</span>
+                                    </td>
+                                    <td>
+                                        <span class="fw-bold text-success">@session.PerformanceScore</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">@session.Accuracy.ToString("F1")%</span>
+                                    </td>
+                                    <td>@session.TotalSeconds<small>s</small></td>
+                                    <td>
+                                        @if (session.NextDifficultyLevel > session.Difficulty)
+                                        {
+                                            <span class="badge bg-success">
+                                                <i class="bi bi-arrow-up"></i> Level @session.NextDifficultyLevel
+                                            </span>
+                                        }
+                                        else if (session.NextDifficultyLevel < session.Difficulty)
+                                        {
+                                            <span class="badge bg-warning text-dark">
+                                                <i class="bi bi-arrow-down"></i> Level @session.NextDifficultyLevel
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">
+                                                Keep Level @session.Difficulty
+                                            </span>
+                                        }
+                                    </td>
+                                    <td><small class="text-muted">@session.TimeCompleted.ToString("MMM dd, HH:mm")</small></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-info" role="alert">
+                    <i class="bi bi-info-circle"></i> No game sessions recorded yet. Game results will appear here when patients complete games.
+                </div>
+            }
+        </div>
+    }
+    else if (!isLoading && (patients == null || patients.Count == 0))
+    {
+        <div class="alert alert-warning" role="alert">
+            <i class="bi bi-exclamation-triangle"></i> <strong>No patients assigned yet.</strong> Please assign patients to your account to see their progress.
+        </div>
+    }
+</div>
+
+<!-- Notes Modal -->
+<div class="modal fade" id="notesModal" tabindex="-1" aria-labelledby="notesModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="notesModalLabel">
+                    <i class="bi bi-file-text"></i> Patient Notes - @selectedPatientName
+                </h5>
+                <button type="button" class="btn-close" @onclick="CloseNotesModal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="patientNotesTextarea" class="form-label">Therapy Notes & Observations</label>
+                    <textarea class="form-control" id="patientNotesTextarea" rows="8" 
+                              @bind="currentNotes" @oninput="OnNotesChanged"
+                              placeholder="Enter your therapy notes, observations, and progress tracking here..."></textarea>
+                </div>
+                @if (!string.IsNullOrEmpty(autoSaveStatus))
+                {
+                    <div class="alert alert-success alert-sm mb-0" role="alert">
+                        <i class="bi bi-check-circle"></i> @autoSaveStatus
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(autoSaveError))
+                {
+                    <div class="alert alert-danger alert-sm mb-0" role="alert">
+                        <i class="bi bi-exclamation-circle"></i> @autoSaveError
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseNotesModal">
+                    <i class="bi bi-x-circle"></i> Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isLoading = true;
+    private string? errorMessage;
+    private int therapistId = 0;
+    private List<PatientProfileDto>? patients;
+    private Dictionary<int, PatientStatisticsDto> patientStats = new();
+    private List<GameSessionDisplayDto>? recentGameSessions;
+    private bool hasInitialized = false;
+
+    // Notes modal state
+    private int selectedPatientId = 0;
+    private string selectedPatientName = "";
+    private string currentNotes = "";
+    private string? autoSaveStatus;
+    private string? autoSaveError;
+    private System.Timers.Timer? autoSaveTimer;
+    private const int AUTOSAVE_DELAY_MS = 1000; // 1 second delay before autosave
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (!firstRender || hasInitialized)
+            {
+                return;
+            }
+
+            hasInitialized = true;
+            Logger?.LogInformation("[THERAPIST-DASHBOARD] Component initializing after render...");
+            
+            var therapistIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+            Logger?.LogInformation($"[THERAPIST-DASHBOARD] Therapist ID from localStorage: {therapistIdStr}");
+            
+            if (string.IsNullOrEmpty(therapistIdStr))
+            {
+                errorMessage = "Therapist ID not found. Please login again.";
+                Logger?.LogWarning("[THERAPIST-DASHBOARD] Therapist ID is empty!");
+                isLoading = false;
+                StateHasChanged();
+                return;
+            }
+
+            if (!int.TryParse(therapistIdStr, out therapistId))
+            {
+                errorMessage = "Invalid therapist ID. Please login again.";
+                Logger?.LogWarning($"[THERAPIST-DASHBOARD] Failed to parse therapist ID: {therapistIdStr}");
+                isLoading = false;
+                StateHasChanged();
+                return;
+            }
+
+            Logger?.LogInformation($"[THERAPIST-DASHBOARD] Parsed therapist ID: {therapistId}");
+            
+            await LoadPatientData();
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"[THERAPIST-DASHBOARD] Error in OnAfterRenderAsync: {ex.Message}");
+        }
+    }
+
+    private async Task LoadPatientData()
+    {
+        try
+        {
+            isLoading = true;
+            Logger?.LogInformation($"[THERAPIST-DASHBOARD] Loading patient data for therapist {therapistId}");
+
+            var baseUrl = NavigationManager.BaseUri;
+            var response = await Http.GetAsync($"{baseUrl}api/therapist/patients");
+
+            if (response.IsSuccessStatusCode)
+            {
+                patients = await response.Content.ReadFromJsonAsync<List<PatientProfileDto>>();
+                Logger?.LogInformation($"[THERAPIST-DASHBOARD] Loaded {patients?.Count ?? 0} patients");
+
+                // For each patient, get their statistics
+                if (patients != null && patients.Count > 0)
+                {
+                    foreach (var patient in patients)
+                    {
+                        try
+                        {
+                            var statsResponse = await Http.GetAsync($"{baseUrl}api/therapist/patient/{patient.UserId}/progress");
+                            if (statsResponse.IsSuccessStatusCode)
+                            {
+                                var stats = await statsResponse.Content.ReadFromJsonAsync<PatientStatisticsDto>();
+                                if (stats != null)
+                                {
+                                    patientStats[patient.UserId] = stats;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger?.LogWarning($"[THERAPIST-DASHBOARD] Error loading stats for patient {patient.UserId}: {ex.Message}");
+                        }
+                    }
+                }
+
+                // Load recent game sessions
+                await LoadRecentGameSessions();
+            }
+            else
+            {
+                errorMessage = $"Failed to load patients: {response.StatusCode}";
+                Logger?.LogError($"[THERAPIST-DASHBOARD] Failed to load patients: {response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"[THERAPIST-DASHBOARD] Error loading patient data: {ex.Message}");
+            errorMessage = $"Error loading data: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadRecentGameSessions()
+    {
+        try
+        {
+            var baseUrl = NavigationManager.BaseUri;
+            var response = await Http.GetAsync($"{baseUrl}api/therapist/recent-game-sessions");
+
+            if (response.IsSuccessStatusCode)
+            {
+                recentGameSessions = await response.Content.ReadFromJsonAsync<List<GameSessionDisplayDto>>();
+                Logger?.LogInformation($"[THERAPIST-DASHBOARD] Loaded {recentGameSessions?.Count ?? 0} recent game sessions");
+            }
+            else
+            {
+                Logger?.LogWarning($"[THERAPIST-DASHBOARD] Failed to load game sessions: {response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"[THERAPIST-DASHBOARD] Error loading recent game sessions: {ex.Message}");
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadPatientData();
+    }
+
+    private void ViewPatientDetails(int patientId)
+    {
+        NavigationManager.NavigateTo($"/therapist-patient/{patientId}");
+    }
+
+    private async Task OpenNotesModal(int patientId, string patientName)
+    {
+        selectedPatientId = patientId;
+        selectedPatientName = patientName;
+        autoSaveStatus = null;
+        autoSaveError = null;
+        currentNotes = "";
+
+        // Try to load existing notes from the patient's assignment
+        // For now, we'll initialize empty and let the user type
+        
+        await JS.InvokeVoidAsync("showNotesModal");
+    }
+
+    private void CloseNotesModal()
+    {
+        // Cancel any pending autosave
+        if (autoSaveTimer != null)
+        {
+            autoSaveTimer.Stop();
+            autoSaveTimer.Dispose();
+            autoSaveTimer = null;
+        }
+
+        selectedPatientId = 0;
+        selectedPatientName = "";
+        currentNotes = "";
+        autoSaveStatus = null;
+        autoSaveError = null;
+
+        JS.InvokeVoidAsync("closeNotesModal");
+    }
+
+    private void OnNotesChanged(ChangeEventArgs e)
+    {
+        currentNotes = e.Value?.ToString() ?? "";
+        
+        // Cancel existing timer
+        if (autoSaveTimer != null)
+        {
+            autoSaveTimer.Stop();
+            autoSaveTimer.Dispose();
+        }
+
+        // Set up new timer for debounced autosave
+        autoSaveTimer = new System.Timers.Timer(AUTOSAVE_DELAY_MS);
+        autoSaveTimer.AutoReset = false;
+        autoSaveTimer.Elapsed += async (sender, e) =>
+        {
+            await AutosaveNotes();
+        };
+        autoSaveTimer.Start();
+    }
+
+    private async Task AutosaveNotes()
+    {
+        try
+        {
+            autoSaveStatus = null;
+            autoSaveError = null;
+
+            var baseUrl = NavigationManager.BaseUri;
+            var request = new SaveNotesDto { Notes = currentNotes };
+
+            var response = await Http.PostAsJsonAsync(
+                $"{baseUrl}api/therapist/patient/{selectedPatientId}/notes",
+                request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<NoteSaveResponseDto>();
+                autoSaveStatus = $"Saved at {DateTime.Now:HH:mm:ss} ({result?.NoteLength ?? 0} characters)";
+                Logger?.LogInformation($"[THERAPIST-DASHBOARD] Autosaved notes for patient {selectedPatientId}");
+                StateHasChanged();
+            }
+            else
+            {
+                autoSaveError = $"Save failed: {response.StatusCode}";
+                Logger?.LogWarning($"[THERAPIST-DASHBOARD] Failed to autosave notes: {response.StatusCode}");
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            autoSaveError = $"Error: {ex.Message}";
+            Logger?.LogError($"[THERAPIST-DASHBOARD] Autosave error: {ex.Message}");
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (autoSaveTimer != null)
+        {
+            autoSaveTimer.Stop();
+            autoSaveTimer.Dispose();
+        }
+    }
+
+    public class PatientProfileDto
+    {
+        public int UserId { get; set; }
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+        public string AgeGroup { get; set; } = "";
+        public DateTime CreatedDate { get; set; }
+    }
+
+    public class PatientStatisticsDto
+    {
+        public int TotalSessionsCompleted { get; set; }
+        public int AverageScore { get; set; }
+        public int BestScore { get; set; }
+        public decimal AverageAccuracy { get; set; }
+        public long TotalPlayTime { get; set; }
+        public Dictionary<string, int>? GameTypes { get; set; }
+    }
+
+    public class SaveNotesDto
+    {
+        public string Notes { get; set; } = "";
+    }
+
+    public class NoteSaveResponseDto
+    {
+        public bool Success { get; set; }
+        public DateTime SavedAt { get; set; }
+        public int NoteLength { get; set; }
+    }
+}

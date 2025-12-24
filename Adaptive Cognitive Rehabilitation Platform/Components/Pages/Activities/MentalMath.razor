@@ -1,0 +1,1148 @@
+@page "/activities/mental-math"
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject AdaptiveCognitiveRehabilitationPlatform.Services.ActivityAIAnalysisService AIService
+
+<PageTitle>Mental Math - NeuroPath</PageTitle>
+
+<div class="activity-container">
+    <div class="activity-header">
+        <button class="back-btn" @onclick="GoBack">
+            <i class="bi bi-arrow-left"></i>
+        </button>
+        <div class="header-info">
+            <h1><i class="bi bi-calculator"></i> Mental Math</h1>
+            <p>Solve arithmetic problems in your head</p>
+        </div>
+        <div class="score-display">
+            <div class="score-item">
+                <i class="bi bi-star-fill"></i>
+                <span>@score</span>
+            </div>
+            <div class="score-item streak">
+                <i class="bi bi-fire"></i>
+                <span>@streak</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="game-area">
+        @if (!gameStarted)
+        {
+            <div class="start-screen">
+                <div class="math-icon">
+                    <i class="bi bi-calculator"></i>
+                </div>
+                <h2>Mental Math Challenge</h2>
+                <p>Select difficulty and solve as many problems as you can!</p>
+
+                <div class="difficulty-selector">
+                    <h3>Choose Difficulty</h3>
+                    <div class="difficulty-options">
+                        <button class="diff-btn @(selectedDifficulty == "easy" ? "selected" : "")" 
+                                @onclick="@(() => selectedDifficulty = "easy")">
+                            <i class="bi bi-emoji-smile"></i>
+                            <span>Easy</span>
+                            <small>Single digit + - ×</small>
+                        </button>
+                        <button class="diff-btn @(selectedDifficulty == "medium" ? "selected" : "")" 
+                                @onclick="@(() => selectedDifficulty = "medium")">
+                            <i class="bi bi-emoji-neutral"></i>
+                            <span>Medium</span>
+                            <small>Double digit + - × ÷</small>
+                        </button>
+                        <button class="diff-btn @(selectedDifficulty == "hard" ? "selected" : "")" 
+                                @onclick="@(() => selectedDifficulty = "hard")">
+                            <i class="bi bi-emoji-expressionless"></i>
+                            <span>Hard</span>
+                            <small>Triple digit all ops</small>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mode-selector">
+                    <h3>Game Mode</h3>
+                    <div class="mode-options">
+                        <button class="mode-btn @(gameMode == "timed" ? "selected" : "")" 
+                                @onclick="@(() => gameMode = "timed")">
+                            <i class="bi bi-stopwatch"></i>
+                            <span>60 Second Sprint</span>
+                        </button>
+                        <button class="mode-btn @(gameMode == "practice" ? "selected" : "")" 
+                                @onclick="@(() => gameMode = "practice")">
+                            <i class="bi bi-infinity"></i>
+                            <span>Practice Mode</span>
+                        </button>
+                    </div>
+                </div>
+
+                <button class="start-btn" @onclick="StartGame">
+                    <i class="bi bi-play-fill"></i> Start Challenge
+                </button>
+            </div>
+        }
+        else if (gameOver)
+        {
+            <div class="results-screen">
+                <div class="results-icon">
+                    <i class="bi bi-trophy-fill"></i>
+                </div>
+                <h2>Challenge Complete!</h2>
+
+                <div class="final-stats">
+                    <div class="stat-card">
+                        <i class="bi bi-star-fill"></i>
+                        <span class="stat-value">@score</span>
+                        <span class="stat-label">Points</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="bi bi-check-circle"></i>
+                        <span class="stat-value">@correctAnswers</span>
+                        <span class="stat-label">Correct</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="bi bi-fire"></i>
+                        <span class="stat-value">@maxStreak</span>
+                        <span class="stat-label">Best Streak</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="bi bi-percent"></i>
+                        <span class="stat-value">@accuracy%</span>
+                        <span class="stat-label">Accuracy</span>
+                    </div>
+                </div>
+
+                @if (isLoadingAIFeedback)
+                {
+                    <div class="ai-analysis-loading">
+                        <div class="ai-spinner"></div>
+                        <p>AI is analyzing your math performance...</p>
+                    </div>
+                }
+                else if (aiAnalysis != null)
+                {
+                    <div class="ai-analysis-card">
+                        <div class="ai-analysis-header">
+                            <i class="bi bi-robot"></i>
+                            <span>AI Performance Analysis</span>
+                        </div>
+                        <div class="ai-analysis-content">
+                            <div class="ai-encouragement">
+                                <i class="bi bi-heart-fill"></i>
+                                <p>@aiAnalysis.Encouragement</p>
+                            </div>
+                            <div class="ai-insights">
+                                <h4><i class="bi bi-lightbulb"></i> Insights</h4>
+                                <p>@aiAnalysis.PatternAnalysis</p>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <div class="result-actions">
+                    <button class="action-btn primary" @onclick="StartGame">
+                        <i class="bi bi-arrow-repeat"></i> Play Again
+                    </button>
+                    <button class="action-btn secondary" @onclick="ResetToMenu">
+                        <i class="bi bi-gear"></i> Change Settings
+                    </button>
+                    <button class="action-btn tertiary" @onclick="GoBack">
+                        <i class="bi bi-grid"></i> All Activities
+                    </button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="play-area">
+                @if (gameMode == "timed")
+                {
+                    <div class="timer-section">
+                        <div class="timer-bar">
+                            <div class="timer-fill" style="width: @timerPercent%"></div>
+                        </div>
+                        <span class="timer-text">@timeRemaining s</span>
+                    </div>
+                }
+
+                <div class="problem-display">
+                    <div class="problem-card @(showFeedback && isCorrect ? "correct-bg" : "") @(showFeedback && !isCorrect ? "incorrect-bg" : "")">
+                        <span class="problem-text">@currentProblem</span>
+                    </div>
+                </div>
+
+                <div class="input-section">
+                    <input type="number" 
+                           class="answer-input @(showFeedback && isCorrect ? "correct" : "") @(showFeedback && !isCorrect ? "incorrect" : "")"
+                           placeholder="Your answer"
+                           @bind="userAnswer"
+                           @bind:event="oninput"
+                           @onkeydown="HandleKeyDown"
+                           disabled="@showFeedback" />
+                    <button class="submit-btn" @onclick="CheckAnswer" disabled="@showFeedback">
+                        <i class="bi bi-check-lg"></i>
+                    </button>
+                </div>
+
+                @if (showFeedback)
+                {
+                    <div class="feedback @(isCorrect ? "correct" : "incorrect")">
+                        @if (isCorrect)
+                        {
+                            <i class="bi bi-check-circle-fill"></i>
+                            <span>Correct! +@pointsEarned points</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-x-circle-fill"></i>
+                            <span>The answer was @correctAnswer</span>
+                        }
+                    </div>
+                }
+
+                <div class="number-pad">
+                    @for (int i = 1; i <= 9; i++)
+                    {
+                        var num = i;
+                        <button class="num-btn" @onclick="() => AddDigit(num)" disabled="@showFeedback">@num</button>
+                    }
+                    <button class="num-btn negative" @onclick="ToggleNegative" disabled="@showFeedback">+/-</button>
+                    <button class="num-btn" @onclick="() => AddDigit(0)" disabled="@showFeedback">0</button>
+                    <button class="num-btn clear" @onclick="ClearInput" disabled="@showFeedback">
+                        <i class="bi bi-backspace"></i>
+                    </button>
+                </div>
+
+                @if (gameMode == "practice")
+                {
+                    <button class="skip-btn" @onclick="SkipProblem">
+                        <i class="bi bi-skip-forward"></i> Skip Problem
+                    </button>
+                }
+
+                @if (gameMode == "practice")
+                {
+                    <button class="end-btn" @onclick="EndGame">
+                        <i class="bi bi-stop-fill"></i> End Practice
+                    </button>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private bool gameStarted = false;
+    private bool gameOver = false;
+    private bool showFeedback = false;
+    private bool isCorrect = false;
+    private string selectedDifficulty = "easy";
+    private string gameMode = "timed";
+    private string currentProblem = "";
+    private string userAnswer = "";
+    private int correctAnswer = 0;
+    private int score = 0;
+    private int streak = 0;
+    private int maxStreak = 0;
+    private int correctAnswers = 0;
+    private int totalProblems = 0;
+    private int pointsEarned = 0;
+    private int timeRemaining = 60;
+    private int timerPercent = 100;
+    private int accuracy = 0;
+    private System.Timers.Timer? gameTimer;
+    private Random random = new();
+    
+    // User info from localStorage
+    private int userId = 0;
+    private string username = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var userIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+                var usernameStr = await JS.InvokeAsync<string>("localStorage.getItem", "username");
+                
+                if (!string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out var parsedId))
+                {
+                    userId = parsedId;
+                }
+                username = usernameStr ?? "";
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading user info: {ex.Message}");
+            }
+        }
+    }
+
+    // AI Integration
+    private bool isLoadingAIFeedback = false;
+    private ActivityAIResult? aiAnalysis;
+
+    private class ActivityAIResult
+    {
+        public string Encouragement { get; set; } = "";
+        public string PatternAnalysis { get; set; } = "";
+    }
+
+    private void StartGame()
+    {
+        gameStarted = true;
+        gameOver = false;
+        score = 0;
+        streak = 0;
+        maxStreak = 0;
+        correctAnswers = 0;
+        totalProblems = 0;
+        timeRemaining = 60;
+        timerPercent = 100;
+        userAnswer = "";
+        showFeedback = false;
+        aiAnalysis = null;
+
+        GenerateProblem();
+
+        if (gameMode == "timed")
+        {
+            StartTimer();
+        }
+    }
+
+    private void StartTimer()
+    {
+        gameTimer?.Stop();
+        gameTimer?.Dispose();
+
+        gameTimer = new System.Timers.Timer(1000);
+        gameTimer.Elapsed += async (s, e) =>
+        {
+            timeRemaining--;
+            timerPercent = (int)((double)timeRemaining / 60 * 100);
+
+            if (timeRemaining <= 0)
+            {
+                gameTimer?.Stop();
+                await InvokeAsync(async () =>
+                {
+                    await EndGame();
+                    StateHasChanged();
+                });
+            }
+            else
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        };
+        gameTimer.Start();
+    }
+
+    private void GenerateProblem()
+    {
+        int a, b;
+        char op;
+        int result;
+
+        switch (selectedDifficulty)
+        {
+            case "easy":
+                a = random.Next(1, 10);
+                b = random.Next(1, 10);
+                op = new[] { '+', '-', '×' }[random.Next(3)];
+                break;
+            case "medium":
+                a = random.Next(10, 50);
+                b = random.Next(1, 20);
+                op = new[] { '+', '-', '×', '÷' }[random.Next(4)];
+                if (op == '÷')
+                {
+                    // Ensure clean division
+                    a = b * random.Next(2, 10);
+                }
+                break;
+            default: // hard
+                a = random.Next(50, 200);
+                b = random.Next(10, 50);
+                op = new[] { '+', '-', '×', '÷' }[random.Next(4)];
+                if (op == '÷')
+                {
+                    a = b * random.Next(2, 20);
+                }
+                break;
+        }
+
+        result = op switch
+        {
+            '+' => a + b,
+            '-' => a - b,
+            '×' => a * b,
+            '÷' => a / b,
+            _ => a + b
+        };
+
+        currentProblem = $"{a} {op} {b} = ?";
+        correctAnswer = result;
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !showFeedback)
+        {
+            await CheckAnswer();
+        }
+    }
+
+    private async Task CheckAnswer()
+    {
+        if (string.IsNullOrWhiteSpace(userAnswer) || showFeedback) return;
+
+        if (int.TryParse(userAnswer, out int answer))
+        {
+            totalProblems++;
+            showFeedback = true;
+            isCorrect = answer == correctAnswer;
+
+            if (isCorrect)
+            {
+                correctAnswers++;
+                streak++;
+                if (streak > maxStreak) maxStreak = streak;
+                
+                // Calculate points with streak bonus
+                pointsEarned = 10 + (streak * 2);
+                if (selectedDifficulty == "medium") pointsEarned = (int)(pointsEarned * 1.5);
+                if (selectedDifficulty == "hard") pointsEarned *= 2;
+                
+                score += pointsEarned;
+            }
+            else
+            {
+                streak = 0;
+            }
+
+            StateHasChanged();
+            await Task.Delay(1200);
+
+            showFeedback = false;
+            userAnswer = "";
+            GenerateProblem();
+            StateHasChanged();
+        }
+    }
+
+    private void AddDigit(int digit)
+    {
+        if (showFeedback) return;
+        userAnswer += digit.ToString();
+    }
+
+    private void ToggleNegative()
+    {
+        if (showFeedback) return;
+        if (userAnswer.StartsWith("-"))
+            userAnswer = userAnswer.Substring(1);
+        else if (!string.IsNullOrEmpty(userAnswer))
+            userAnswer = "-" + userAnswer;
+        else
+            userAnswer = "-";
+    }
+
+    private void ClearInput()
+    {
+        if (showFeedback) return;
+        if (!string.IsNullOrEmpty(userAnswer))
+            userAnswer = userAnswer.Substring(0, userAnswer.Length - 1);
+    }
+
+    private void SkipProblem()
+    {
+        totalProblems++;
+        streak = 0;
+        userAnswer = "";
+        GenerateProblem();
+    }
+
+    private async Task EndGame()
+    {
+        gameTimer?.Stop();
+        gameTimer?.Dispose();
+        gameOver = true;
+        accuracy = totalProblems > 0 ? (int)((double)correctAnswers / totalProblems * 100) : 0;
+        _ = Task.Run(async () => await LoadAIFeedback());
+        await SaveActivitySession();
+    }
+
+    private async Task LoadAIFeedback()
+    {
+        isLoadingAIFeedback = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var session = new AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession
+            {
+                UserId = 1,
+                ActivityType = "MentalMath",
+                StartTime = DateTime.UtcNow.AddSeconds(-(gameMode == "timed" ? 60 : 120)),
+                EndTime = DateTime.UtcNow,
+                DurationSeconds = gameMode == "timed" ? 60 - timeRemaining : 120,
+                Score = score,
+                Accuracy = (decimal)accuracy,
+                Difficulty = selectedDifficulty,
+                ActivityData = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    problemsAttempted = totalProblems,
+                    correctAnswers = correctAnswers,
+                    maxStreak = maxStreak,
+                    gameMode = gameMode
+                })
+            };
+
+            var analysis = await AIService.AnalyzeActivityPerformanceAsync(session, new List<AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession>());
+            if (analysis != null)
+            {
+                aiAnalysis = new ActivityAIResult
+                {
+                    Encouragement = analysis.Encouragement,
+                    PatternAnalysis = analysis.PatternAnalysis
+                };
+            }
+        }
+        catch
+        {
+            aiAnalysis = new ActivityAIResult
+            {
+                Encouragement = accuracy >= 70 ? "Excellent mental math skills! Your brain is getting sharper with each calculation!" : "Good practice! Mental math improves with every session you complete.",
+                PatternAnalysis = $"You solved {correctAnswers}/{totalProblems} problems correctly with a best streak of {maxStreak}."
+            };
+        }
+        finally
+        {
+            isLoadingAIFeedback = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task SaveActivitySession()
+    {
+        try
+        {
+            var activityData = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                problemsAttempted = totalProblems,
+                problemsCorrect = correctAnswers,
+                operationType = "Mixed",
+                currentStreak = streak,
+                maxStreak = maxStreak,
+                difficultyLevel = selectedDifficulty
+            });
+
+            var request = new
+            {
+                userId = userId,
+                username = username,
+                activityType = "MentalMath",
+                activityName = "Mental Math",
+                durationSeconds = gameMode == "timed" ? 60 - timeRemaining : 0,
+                score = score,
+                accuracy = (decimal)accuracy,
+                completionPercentage = 100,
+                difficulty = selectedDifficulty,
+                activityData = activityData,
+                moodBefore = "",
+                moodAfter = ""
+            };
+
+            var apiUrl = $"{Navigation.BaseUri}api/activities/save";
+            await Http.PostAsJsonAsync(apiUrl, request);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving activity: {ex.Message}");
+        }
+    }
+
+    private void ResetToMenu()
+    {
+        gameStarted = false;
+        gameOver = false;
+    }
+
+    private void GoBack()
+    {
+        gameTimer?.Stop();
+        gameTimer?.Dispose();
+        Navigation.NavigateTo("/games");
+    }
+
+    public void Dispose()
+    {
+        gameTimer?.Stop();
+        gameTimer?.Dispose();
+    }
+}
+
+<style>
+    .activity-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    }
+
+    .activity-header {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        padding: 1.5rem 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .back-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        border: 2px solid rgba(255,255,255,0.3);
+        background: rgba(255,255,255,0.1);
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        transition: all 200ms;
+    }
+
+    .back-btn:hover {
+        background: rgba(255,255,255,0.2);
+    }
+
+    .header-info {
+        flex-grow: 1;
+    }
+
+    .header-info h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .header-info p {
+        margin: 0.25rem 0 0;
+        opacity: 0.9;
+        font-size: 0.9rem;
+    }
+
+    .score-display {
+        display: flex;
+        gap: 1rem;
+    }
+
+    .score-item {
+        background: rgba(255,255,255,0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .score-item.streak i {
+        color: #fbbf24;
+    }
+
+    .game-area {
+        max-width: 600px;
+        margin: 2rem auto;
+        padding: 0 1.5rem;
+    }
+
+    .start-screen, .results-screen {
+        background: white;
+        border-radius: 24px;
+        padding: 2.5rem;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+
+    .math-icon, .results-icon {
+        width: 100px;
+        height: 100px;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 3rem;
+        color: white;
+    }
+
+    .results-icon {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+
+    .start-screen h2, .results-screen h2 {
+        margin: 0 0 0.5rem;
+        font-size: 1.75rem;
+        color: #1f2937;
+    }
+
+    .start-screen > p {
+        color: #6b7280;
+        margin-bottom: 2rem;
+    }
+
+    .difficulty-selector, .mode-selector {
+        margin-bottom: 2rem;
+    }
+
+    .difficulty-selector h3, .mode-selector h3 {
+        color: #4b5563;
+        font-size: 1rem;
+        margin: 0 0 1rem;
+    }
+
+    .difficulty-options, .mode-options {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: center;
+    }
+
+    .diff-btn, .mode-btn {
+        flex: 1;
+        max-width: 150px;
+        padding: 1rem;
+        background: #f9fafb;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 200ms;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .diff-btn:hover, .mode-btn:hover {
+        border-color: #3b82f6;
+        background: #eff6ff;
+    }
+
+    .diff-btn.selected, .mode-btn.selected {
+        border-color: #3b82f6;
+        background: #eff6ff;
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+    }
+
+    .diff-btn i, .mode-btn i {
+        font-size: 1.5rem;
+        color: #3b82f6;
+    }
+
+    .diff-btn span, .mode-btn span {
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .diff-btn small {
+        font-size: 0.75rem;
+        color: #6b7280;
+    }
+
+    .start-btn {
+        padding: 1rem 3rem;
+        font-size: 1.25rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        border: none;
+        border-radius: 16px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        transition: all 300ms;
+    }
+
+    .start-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 30px rgba(59, 130, 246, 0.4);
+    }
+
+    .play-area {
+        background: white;
+        border-radius: 24px;
+        padding: 2rem;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+
+    .timer-section {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .timer-bar {
+        flex-grow: 1;
+        height: 12px;
+        background: #e5e7eb;
+        border-radius: 6px;
+        overflow: hidden;
+    }
+
+    .timer-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #3b82f6, #2563eb);
+        transition: width 200ms linear;
+    }
+
+    .timer-text {
+        font-weight: 700;
+        color: #3b82f6;
+        min-width: 50px;
+        text-align: right;
+    }
+
+    .problem-display {
+        margin-bottom: 1.5rem;
+    }
+
+    .problem-card {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        border-radius: 20px;
+        padding: 2rem;
+        text-align: center;
+        transition: all 300ms;
+    }
+
+    .problem-card.correct-bg {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+
+    .problem-card.incorrect-bg {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    }
+
+    .problem-text {
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: white;
+    }
+
+    .input-section {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .answer-input {
+        flex-grow: 1;
+        padding: 1rem 1.5rem;
+        font-size: 1.5rem;
+        font-weight: 700;
+        text-align: center;
+        border: 3px solid #e5e7eb;
+        border-radius: 16px;
+        font-family: inherit;
+        transition: all 200ms;
+    }
+
+    .answer-input:focus {
+        outline: none;
+        border-color: #3b82f6;
+    }
+
+    .answer-input.correct {
+        border-color: #10b981;
+        background: #ecfdf5;
+    }
+
+    .answer-input.incorrect {
+        border-color: #ef4444;
+        background: #fef2f2;
+    }
+
+    .submit-btn {
+        width: 70px;
+        height: 70px;
+        border-radius: 16px;
+        border: none;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        font-size: 1.75rem;
+        cursor: pointer;
+        transition: all 200ms;
+    }
+
+    .submit-btn:hover:not(:disabled) {
+        transform: scale(1.05);
+    }
+
+    .submit-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .feedback {
+        text-align: center;
+        padding: 1rem;
+        border-radius: 12px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        animation: fadeIn 200ms ease-out;
+    }
+
+    .feedback.correct {
+        background: #ecfdf5;
+        color: #047857;
+    }
+
+    .feedback.incorrect {
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+    .feedback i {
+        font-size: 1.25rem;
+    }
+
+    .number-pad {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .num-btn {
+        padding: 1rem;
+        font-size: 1.5rem;
+        font-weight: 700;
+        background: #f9fafb;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 200ms;
+        font-family: inherit;
+    }
+
+    .num-btn:hover:not(:disabled) {
+        background: #eff6ff;
+        border-color: #3b82f6;
+    }
+
+    .num-btn:active:not(:disabled) {
+        transform: scale(0.95);
+    }
+
+    .num-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .num-btn.negative {
+        font-size: 1rem;
+    }
+
+    .num-btn.clear {
+        color: #ef4444;
+    }
+
+    .skip-btn, .end-btn {
+        width: 100%;
+        padding: 0.875rem;
+        background: transparent;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        color: #6b7280;
+        font-family: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+        margin-bottom: 0.5rem;
+    }
+
+    .skip-btn:hover, .end-btn:hover {
+        border-color: #9ca3af;
+        color: #374151;
+    }
+
+    .final-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin: 2rem 0;
+    }
+
+    .stat-card {
+        background: #f9fafb;
+        border-radius: 16px;
+        padding: 1.25rem;
+        text-align: center;
+    }
+
+    .stat-card i {
+        font-size: 1.5rem;
+        color: #3b82f6;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-card .stat-value {
+        display: block;
+        font-size: 2rem;
+        font-weight: 800;
+        color: #1f2937;
+    }
+
+    .stat-card .stat-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .result-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .action-btn {
+        padding: 1rem;
+        border-radius: 12px;
+        font-family: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .action-btn.primary {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        border: none;
+    }
+
+    .action-btn.primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
+    }
+
+    .action-btn.secondary {
+        background: #eff6ff;
+        color: #3b82f6;
+        border: none;
+    }
+
+    .action-btn.tertiary {
+        background: white;
+        border: 2px solid #e5e7eb;
+        color: #6b7280;
+    }
+
+    @@keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* AI Integration Styles */
+    .ai-analysis-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.5rem;
+        color: #6b7280;
+    }
+
+    .ai-spinner {
+        width: 36px;
+        height: 36px;
+        border: 3px solid #dbeafe;
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .ai-analysis-card {
+        background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+        border: 2px solid #3b82f6;
+        border-radius: 16px;
+        margin: 1.5rem 0;
+        overflow: hidden;
+    }
+
+    .ai-analysis-header {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        padding: 0.75rem 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+    }
+
+    .ai-analysis-content {
+        padding: 1.25rem;
+    }
+
+    .ai-encouragement {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #93c5fd;
+    }
+
+    .ai-encouragement i {
+        color: #ef4444;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+    }
+
+    .ai-encouragement p {
+        margin: 0;
+        color: #1e40af;
+        font-size: 0.95rem;
+        line-height: 1.5;
+    }
+
+    .ai-insights h4 {
+        margin: 0 0 0.5rem;
+        color: #1e40af;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.9rem;
+    }
+
+    .ai-insights p {
+        margin: 0;
+        color: #1d4ed8;
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+</style>

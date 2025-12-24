@@ -1,0 +1,1032 @@
+@page "/games/sorting-task"
+@using AdaptiveCognitiveRehabilitationPlatform.Services
+@using NeuroPath.Models
+@using AdaptiveCognitiveRehabilitationPlatform.Services.GameAnalytics
+@inject ILogger<SortingTask> Logger
+@inject GameStatisticsService StatsService
+@inject GameAiAnalysisService AiService
+@inject IGameSessionRepository SessionRepository
+@inject DynamicSortingContentService DynamicContentService
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Sorting Task</PageTitle>
+
+<div class="game-container">
+    <h1><i class="bi bi-collection"></i> Sorting Task</h1>
+    
+    @if (!gameStarted && !gameEnded) {
+        <div class="difficulty-box">
+            <h2>Select Difficulty Level</h2>
+            <div class="difficulty-buttons">
+                <button class="diff-btn @(selectedLevel == 1 ? "active" : "")" 
+                        @onclick="() => HandleSelectLevel(1)">
+                    <i class="bi bi-lightning-fill"></i>
+                    <span>Easy (6 items)</span>
+                </button>
+                <button class="diff-btn @(selectedLevel == 2 ? "active" : "")" 
+                        @onclick="() => HandleSelectLevel(2)">
+                    <i class="bi bi-star-fill"></i>
+                    <span>Medium (12 items)</span>
+                </button>
+                <button class="diff-btn @(selectedLevel == 3 ? "active" : "")" 
+                        @onclick="() => HandleSelectLevel(3)">
+                    <i class="bi bi-fire"></i>
+                    <span>Hard (18 items)</span>
+                </button>
+            </div>
+            <button class="start-btn" @onclick="HandleStartGame" disabled="@(selectedLevel == 0)">
+                <i class="bi bi-play-fill"></i> START GAME
+            </button>
+        </div>
+    }
+    
+    @if (gameStarted && !gameEnded) {
+        <div class="game-board">
+            <div class="progress-info">
+                <span>Sorted: <strong>@sortedCount</strong> / <strong>@totalItems</strong></span>
+            </div>
+            
+            <div class="items-pool">
+                <h3>Items to Sort:</h3>
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <button style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9em;" @onclick="HandleAiShuffle">
+                        <i class="bi bi-shuffle"></i> Shuffle Items
+                    </button>
+                </div>
+                <div class="items-list">
+                    @foreach (var item in itemList.Where(i => !i.IsSorted)) {
+                        <button class="item-btn @(selectedItemId == item.Id ? "selected" : "")" @onclick="@((MouseEventArgs e) => HandleSelectItem(item.Id))">
+                            <span>@item.Name</span>
+                            @if (selectedItemId == item.Id) {
+                                <i class="bi bi-check-circle-fill"></i>
+                            }
+                        </button>
+                    }
+                </div>
+            </div>
+            
+            @if (selectedItemId > 0) {
+                <div class="quick-actions">
+                    <p style="text-align: center; color: #667eea; font-weight: bold;">? Item selected! Click a category to place it.</p>
+                </div>
+            }
+            
+            <div class="categories-section">
+                <h3>Categories:</h3>
+                <div class="categories-grid">
+                    @foreach (var category in categories) {
+                        <div class="category-box">
+                            <h4>@category.Name</h4>
+                            <div class="category-items">
+                                @foreach (var item in itemList.Where(i => i.Category == category.Name && i.IsSorted)) {
+                                    <div class="sorted-item">
+                                        <span>@item.Name</span>
+                                        <i class="bi bi-check-circle-fill"></i>
+                                    </div>
+                                }
+                                @if (selectedCategory == category.Name && selectedItemId > 0) {
+                                    <button class="place-btn" @onclick="@((MouseEventArgs e) => HandlePlaceItem())">
+                                        <i class="bi bi-check"></i> Place Here
+                                    </button>
+                                    <button class="cancel-btn" @onclick="@((MouseEventArgs e) => HandleCancelSelection())">
+                                        <i class="bi bi-x"></i> Cancel
+                                    </button>
+                                }
+                            </div>
+                            @if (selectedItemId == 0 || selectedCategory != category.Name) {
+                                <button class="category-select-btn" @onclick="@((MouseEventArgs e) => HandleSelectCategory(category.Name))">
+                                    <i class="bi bi-arrow-down-circle"></i> Place Item
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+    
+    @if (gameEnded) {
+        <div class="results-box">
+            <h2><i class="bi bi-trophy-fill"></i> Game Complete!</h2>
+            
+            @if (aiAnalyzing) {
+                <div class="ai-analyzing">
+                    <div class="spinner"></div>
+                    <p> AI is analyzing your performance...</p>
+                </div>
+            }
+            else if (_aiResponse != null) {
+                <div class="performance-score-badge">
+                    @((int)_aiResponse.PerformanceScore)
+                </div>
+                
+                <div class="stats">
+                    <p>Total Items: <strong>@totalItems</strong></p>
+                    <p>Correctly Sorted: <strong>@sortedCount</strong></p>
+                    <p>Accuracy: <strong>@((sortedCount * 100) / totalItems)%</strong></p>
+                    <p>Time Taken: <strong>@elapsedSeconds</strong>s</p>
+                </div>
+
+                <div class="ai-feedback">
+                    <div class="feedback-section">
+                        <h3><i class="bi bi-star-fill"></i> Encouragement</h3>
+                        <p>@_aiResponse.Encouragement</p>
+                    </div>
+                    <div class="feedback-section">
+                        <h3><i class="bi bi-heart-fill"></i> Effort Note</h3>
+                        <p>@_aiResponse.EffortNote</p>
+                    </div>
+                    <div class="feedback-section">
+                        <h3><i class="bi bi-emoji-smile"></i> Fun Message</h3>
+                        <p>@_aiResponse.FunMessage</p>
+                    </div>
+                </div>
+            }
+            else {
+                <div class="stats">
+                    <p>Total Items: <strong>@totalItems</strong></p>
+                    <p>Correctly Sorted: <strong>@sortedCount</strong></p>
+                    <p>Accuracy: <strong>@((sortedCount * 100) / totalItems)%</strong></p>
+                    <p>Time Taken: <strong>@elapsedSeconds</strong>s</p>
+                </div>
+            }
+            
+            <button class="reset-btn" @onclick="@((MouseEventArgs e) => HandleResetGame())">
+                <i class="bi bi-arrow-clockwise"></i> Try Again
+            </button>
+        </div>
+    }
+</div>
+
+<style>
+    .game-container {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 20px;
+        font-family: ''Segoe UI'', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .game-container h1 {
+        color: white;
+        font-size: 2.5em;
+        margin-bottom: 30px;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .game-container i {
+        margin-right: 10px;
+    }
+
+    .difficulty-box {
+        background: white;
+        border-radius: 20px;
+        padding: 40px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        text-align: center;
+        max-width: 600px;
+        width: 100%;
+    }
+
+    .difficulty-box h2 {
+        color: #333;
+        margin-bottom: 25px;
+        font-size: 1.8em;
+    }
+
+    .difficulty-buttons {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 25px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .diff-btn {
+        background: #f0f0f0;
+        border: 2px solid #ddd;
+        padding: 12px 20px;
+        border-radius: 10px;
+        font-size: 1em;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 140px;
+    }
+
+    .diff-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .diff-btn.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: #667eea;
+    }
+
+    .start-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 15px 40px;
+        font-size: 1.2em;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: bold;
+        width: 100%;
+    }
+
+    .start-btn:hover:not(:disabled) {
+        transform: scale(1.05);
+        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .start-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .game-board {
+        background: white;
+        border-radius: 20px;
+        padding: 30px;
+        max-width: 900px;
+        width: 100%;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    }
+
+    .progress-info {
+        text-align: center;
+        font-size: 1.1em;
+        margin-bottom: 20px;
+        color: #667eea;
+        font-weight: bold;
+    }
+
+    .items-pool {
+        background: #f9f9f9;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 25px;
+    }
+
+    .items-pool h3 {
+        color: #333;
+        margin-bottom: 15px;
+    }
+
+    .items-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .item-btn {
+        background: white;
+        border: 2px solid #667eea;
+        color: #667eea;
+        padding: 8px 15px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .item-btn:hover {
+        background: #667eea;
+        color: white;
+        transform: scale(1.05);
+    }
+
+    .item-btn.selected {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: #764ba2;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.5);
+        transform: scale(1.12);
+    }
+
+    .item-btn.selected i {
+        font-size: 1.2em;
+        animation: pulse 0.6s ease-in-out;
+    }
+
+    @@keyframes pulse {
+        0% { transform: scale(0.8); }
+        50% { transform: scale(1.3); }
+        100% { transform: scale(1); }
+    }
+
+    .categories-section {
+        margin-top: 20px;
+    }
+
+    .categories-section h3 {
+        color: #333;
+        margin-bottom: 15px;
+    }
+
+    .categories-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+    }
+
+    .category-box {
+        background: #f9f9f9;
+        border: 2px solid #ddd;
+        border-radius: 10px;
+        padding: 15px;
+        min-height: 200px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .category-box h4 {
+        color: #667eea;
+        margin: 0 0 12px 0;
+        border-bottom: 2px solid #667eea;
+        padding-bottom: 8px;
+    }
+
+    .category-items {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .sorted-item {
+        background: #d4edda;
+        border: 1px solid #28a745;
+        color: #155724;
+        padding: 8px 10px;
+        border-radius: 6px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.9em;
+    }
+
+    .place-btn, .cancel-btn {
+        padding: 8px 10px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+    }
+
+    .place-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .place-btn:hover {
+        transform: scale(1.05);
+    }
+
+    .cancel-btn {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .cancel-btn:hover {
+        background: #f5c6cb;
+    }
+
+    .category-select-btn {
+        background: white;
+        border: 2px solid #667eea;
+        color: #667eea;
+        padding: 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: all 0.3s ease;
+        margin-top: auto;
+    }
+
+    .category-select-btn:hover {
+        background: #667eea;
+        color: white;
+    }
+
+    .quick-actions {
+        display: flex;
+        justify-content: center;
+        margin: 20px 0;
+        gap: 15px;
+    }
+
+    .ai-arrange-btn {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 1em;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .ai-arrange-btn:hover {
+        transform: scale(1.05);
+        box-shadow: 0 5px 20px rgba(40, 167, 69, 0.4);
+    }
+
+    .ai-arranging-status {
+        background: #d1ecf1;
+        border: 2px solid #17a2b8;
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        margin: 20px 0;
+        color: #0c5460;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 15px;
+    }
+
+    .mini-spinner {
+        border: 3px solid #d1ecf1;
+        border-top: 3px solid #17a2b8;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        animation: spin 1s linear infinite;
+    }
+
+    .results-box {
+        background: white;
+        border-radius: 20px;
+        padding: 40px;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        max-width: 600px;
+    }
+
+    .results-box h2 {
+        color: #667eea;
+        margin-bottom: 25px;
+    }
+
+    .stats {
+        background: #f9f9f9;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 25px;
+    }
+
+    .stats p {
+        font-size: 1.1em;
+        margin: 10px 0;
+        color: #333;
+    }
+
+    .reset-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 12px 30px;
+        font-size: 1.1em;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: bold;
+    }
+
+    .reset-btn:hover {
+        transform: scale(1.05);
+        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .performance-score-badge {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5em;
+        font-weight: bold;
+        margin: 20px auto;
+        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+    }
+
+    .ai-feedback {
+        background: #f9f9f9;
+        padding: 20px;
+        border-radius: 10px;
+        margin: 20px 0;
+    }
+
+    .feedback-section {
+        background: white;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 8px;
+        text-align: left;
+        border-left: 4px solid #667eea;
+    }
+
+    .feedback-section h3 {
+        color: #667eea;
+        margin: 0 0 8px 0;
+        font-size: 1rem;
+    }
+
+    .feedback-section p {
+        color: #555;
+        margin: 0;
+        line-height: 1.5;
+    }
+
+    .ai-analyzing {
+        text-align: center;
+        padding: 40px;
+    }
+
+    .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #667eea;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+        margin: 20px auto;
+    }
+
+    @@keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+</style>
+
+@code {
+    private int selectedLevel = 0;
+    private bool gameStarted = false;
+    private bool gameEnded = false;
+    private bool aiAnalyzing = false;
+    private int sortedCount = 0;
+    private int totalItems = 0;
+    private int selectedItemId = 0;
+    private string selectedCategory = "";
+    private int elapsedSeconds = 0;
+    private DateTime gameStartTime;
+    private GameSessionResult? _gameSessionResult;
+    private GameAiAnalysisService.AiAnalysisResponse? _aiResponse;
+
+    // Current user context (TODO: Get from authentication)
+    private int currentUserId = 1;
+    private int currentProfileId = 1;
+
+    private List<SortItem> itemList = new();
+    private List<Category> categories = new();
+
+    private class SortItem {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Category { get; set; } = "";
+        public bool IsSorted { get; set; }
+    }
+
+    private class Category {
+        public string Name { get; set; } = "";
+    }
+
+    private void HandleSelectLevel(int level) {
+        selectedLevel = level;
+        Logger?.LogInformation($"Level selected: {level}");
+        StateHasChanged();
+    }
+
+    private void HandleStartGame() {
+        if (selectedLevel == 0) {
+            Logger?.LogWarning("Attempted to start game without selecting a level");
+            return;
+        }
+        gameStarted = true;
+        gameEnded = false;
+        sortedCount = 0;
+        selectedItemId = 0;
+        selectedCategory = "";
+        gameStartTime = DateTime.Now;
+        Logger?.LogInformation($"Game started with level {selectedLevel}");
+        _ = InitializeGameWithAI();  // Load game content asynchronously from AI
+        StateHasChanged();
+    }
+
+    private async Task InitializeGameWithAI()
+    {
+        try
+        {
+            // Try to get dynamic content from AI
+            var dynamicContent = await DynamicContentService.GenerateDynamicContentAsync(selectedLevel);
+            
+            if (dynamicContent != null && dynamicContent.Categories.Count > 0 && dynamicContent.Items.Count > 0)
+            {
+                itemList.Clear();
+                categories.Clear();
+
+                // Add categories
+                foreach (var category in dynamicContent.Categories)
+                {
+                    categories.Add(new Category { Name = category.Name });
+                }
+
+                // Add items with shuffled IDs
+                int id = 1;
+                foreach (var item in dynamicContent.Items)
+                {
+                    itemList.Add(new SortItem 
+                    { 
+                        Id = id, 
+                        Name = item.Name, 
+                        Category = item.Category 
+                    });
+                    id++;
+                }
+
+                Logger?.LogInformation($"? Loaded dynamic content: {dynamicContent.Categories.Count} categories, {dynamicContent.Items.Count} items");
+            }
+            else
+            {
+                Logger?.LogWarning("Failed to load dynamic content, using default");
+                InitializeGameWithDefault();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"Error loading dynamic content: {ex.Message}, using default");
+            InitializeGameWithDefault();
+        }
+
+        totalItems = itemList.Count;
+        Shuffle();
+        StateHasChanged();
+    }
+
+    private void InitializeGameWithDefault()
+    {
+        itemList.Clear();
+        categories.Clear();
+
+        if (selectedLevel == 1) {
+            categories.Add(new Category { Name = "Fruits" });
+            categories.Add(new Category { Name = "Vegetables" });
+
+            itemList.Add(new SortItem { Id = 1, Name = "Apple", Category = "Fruits" });
+            itemList.Add(new SortItem { Id = 2, Name = "Orange", Category = "Fruits" });
+            itemList.Add(new SortItem { Id = 3, Name = "Banana", Category = "Fruits" });
+            itemList.Add(new SortItem { Id = 4, Name = "Carrot", Category = "Vegetables" });
+            itemList.Add(new SortItem { Id = 5, Name = "Broccoli", Category = "Vegetables" });
+            itemList.Add(new SortItem { Id = 6, Name = "Corn", Category = "Vegetables" });
+        }
+        else if (selectedLevel == 2) {
+            categories.Add(new Category { Name = "Fruits" });
+            categories.Add(new Category { Name = "Vegetables" });
+            categories.Add(new Category { Name = "Proteins" });
+
+            itemList.Add(new SortItem { Id = 1, Name = "Apple", Category = "Fruits" });
+            itemList.Add(new SortItem { Id = 2, Name = "Orange", Category = "Fruits" });
+            itemList.Add(new SortItem { Id = 3, Name = "Banana", Category = "Fruits" });
+            itemList.Add(new SortItem { Id = 4, Name = "Grapes", Category = "Fruits" });
+            itemList.Add(new SortItem { Id = 5, Name = "Carrot", Category = "Vegetables" });
+            itemList.Add(new SortItem { Id = 6, Name = "Broccoli", Category = "Vegetables" });
+            itemList.Add(new SortItem { Id = 7, Name = "Corn", Category = "Vegetables" });
+            itemList.Add(new SortItem { Id = 8, Name = "Tomato", Category = "Vegetables" });
+            itemList.Add(new SortItem { Id = 9, Name = "Chicken", Category = "Proteins" });
+            itemList.Add(new SortItem { Id = 10, Name = "Fish", Category = "Proteins" });
+            itemList.Add(new SortItem { Id = 11, Name = "Egg", Category = "Proteins" });
+            itemList.Add(new SortItem { Id = 12, Name = "Meat", Category = "Proteins" });
+        }
+        else if (selectedLevel == 3) {
+            categories.Add(new Category { Name = "Fruits" });
+            categories.Add(new Category { Name = "Vegetables" });
+            categories.Add(new Category { Name = "Proteins" });
+            categories.Add(new Category { Name = "Grains" });
+
+            itemList.Add(new SortItem { Id = 1, Name = "Apple", Category = "Fruits" });
+            itemList.Add(new SortItem { Id = 2, Name = "Orange", Category = "Fruits" });
+            itemList.Add(new SortItem { Id = 3, Name = "Banana", Category = "Fruits" });
+            itemList.Add(new SortItem { Id = 4, Name = "Grapes", Category = "Fruits" });
+            itemList.Add(new SortItem { Id = 5, Name = "Watermelon", Category = "Fruits" });
+            itemList.Add(new SortItem { Id = 6, Name = "Carrot", Category = "Vegetables" });
+            itemList.Add(new SortItem { Id = 7, Name = "Broccoli", Category = "Vegetables" });
+            itemList.Add(new SortItem { Id = 8, Name = "Corn", Category = "Vegetables" });
+            itemList.Add(new SortItem { Id = 9, Name = "Tomato", Category = "Vegetables" });
+            itemList.Add(new SortItem { Id = 10, Name = "Cucumber", Category = "Vegetables" });
+            itemList.Add(new SortItem { Id = 11, Name = "Chicken", Category = "Proteins" });
+            itemList.Add(new SortItem { Id = 12, Name = "Fish", Category = "Proteins" });
+            itemList.Add(new SortItem { Id = 13, Name = "Egg", Category = "Proteins" });
+            itemList.Add(new SortItem { Id = 14, Name = "Meat", Category = "Proteins" });
+            itemList.Add(new SortItem { Id = 15, Name = "Wheat", Category = "Grains" });
+            itemList.Add(new SortItem { Id = 16, Name = "Bread", Category = "Grains" });
+            itemList.Add(new SortItem { Id = 17, Name = "Rice", Category = "Grains" });
+            itemList.Add(new SortItem { Id = 18, Name = "Pasta", Category = "Grains" });
+        }
+    }
+
+    private void InitializeGame() {
+        // This method is now deprecated - use InitializeGameWithAI instead
+        InitializeGameWithDefault();
+    }
+
+    private void Shuffle() {
+        Random random = new();
+        for (int i = itemList.Count - 1; i > 0; i--) {
+            int randomIndex = random.Next(i + 1);
+            var temp = itemList[i];
+            itemList[i] = itemList[randomIndex];
+            itemList[randomIndex] = temp;
+        }
+        Logger?.LogInformation("?? Items shuffled randomly!");
+    }
+
+    private void HandleAiShuffle() {
+        Logger?.LogInformation("?? AI Shuffle requested - randomizing item order...");
+        Shuffle();
+        selectedItemId = 0;
+        selectedCategory = "";
+        StateHasChanged();
+    }
+
+    private void HandleSelectItem(int itemId) {
+        // Toggle selection - if clicking same item again, deselect it
+        if (selectedItemId == itemId) {
+            selectedItemId = 0;
+        } else {
+            selectedItemId = itemId;
+        }
+        selectedCategory = "";
+        Logger?.LogInformation($"Item selected: {itemId}");
+        StateHasChanged();
+    }
+
+    private void HandleSelectCategory(string categoryName) {
+        selectedCategory = categoryName;
+        Logger?.LogInformation($"Category selected: {categoryName}");
+        StateHasChanged();
+    }
+
+    private async Task HandlePlaceItem() {
+        var item = itemList.FirstOrDefault(i => i.Id == selectedItemId);
+        if (item != null && item.Category == selectedCategory) {
+            item.IsSorted = true;
+            sortedCount++;
+            selectedItemId = 0;
+            selectedCategory = "";
+
+            if (sortedCount == totalItems) {
+                elapsedSeconds = (int)(DateTime.Now - gameStartTime).TotalSeconds;
+                gameEnded = true;
+                
+                // Create game session result for AI analysis
+                var accuracy = (sortedCount * 100) / totalItems;
+                _gameSessionResult = new GameSessionResult
+                {
+                    GameType = "Sorting Task",
+                    DifficultyLevel = selectedLevel,
+                    TotalMoves = totalItems,
+                    TotalMatches = totalItems,
+                    CorrectMatches = sortedCount,
+                    ErrorCount = totalItems - sortedCount,
+                    ElapsedSeconds = elapsedSeconds,
+                    StartTime = gameStartTime,
+                    EndTime = DateTime.Now,
+                    AccuracyPercentage = accuracy,
+                    SpeedScore = 100 - Math.Min(elapsedSeconds / 3, 50),
+                    ConsistencyScore = accuracy > 80 ? 90 : accuracy > 60 ? 75 : 60,
+                    OverallScore = (accuracy * 0.6) + ((100 - Math.Min(elapsedSeconds / 3, 50)) * 0.4)
+                };
+                
+                await SaveGameSessionAsync();
+                AnalyzeGameWithAI();
+            }
+        }
+        StateHasChanged();
+    }
+
+    private void HandleCancelSelection() {
+        selectedItemId = 0;
+        selectedCategory = "";
+        StateHasChanged();
+    }
+
+    private async void AnalyzeGameWithAI()
+    {
+        aiAnalyzing = true;
+        StateHasChanged();
+
+        try
+        {
+            _aiResponse = await AiService.AnalyzeGamePerformanceAsync(
+                _gameSessionResult ?? new GameSessionResult(),
+                "Player",
+                0
+            );
+
+            Logger?.LogInformation($"AI Analysis complete: Score {_aiResponse?.PerformanceScore}");
+            
+            // ?? Autosave game result to database
+            await AutosaveGameResultAsync(_aiResponse);
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"AI Analysis failed: {ex.Message}");
+            _aiResponse = new GameAiAnalysisService.AiAnalysisResponse
+            {
+                Encouragement = "Great job sorting all items!",
+                FunMessage = "You organized everything perfectly!",
+                EffortNote = "Keep practicing to sort even faster!",
+                PerformanceScore = _gameSessionResult?.OverallScore ?? 75,
+                NextDifficultyLevel = Math.Min(3, selectedLevel + 1),
+                Confidence = 0.7
+            };
+            
+            // Still autosave even with fallback response
+            await AutosaveGameResultAsync(_aiResponse);
+        }
+
+        aiAnalyzing = false;
+        StateHasChanged();
+    }
+
+    private async Task AutosaveGameResultAsync(GameAiAnalysisService.AiAnalysisResponse? aiResponse)
+    {
+        try
+        {
+            // Get user info from localStorage
+            var userId = await GetCurrentUserIdAsync();
+            var username = await GetCurrentUsernameAsync();
+
+            var autosaveRequest = new
+            {
+                UserId = userId,
+                Username = username,
+                GameType = "SortingTask",
+                GameMode = "Practice",
+                Difficulty = selectedLevel,
+                DifficultyName = GetDifficultyName(selectedLevel),
+                Score = (int)(aiResponse?.PerformanceScore ?? 0),
+                Accuracy = (decimal)(_gameSessionResult?.AccuracyPercentage ?? 0),
+                TotalMoves = totalItems,
+                CorrectMoves = sortedCount,
+                ErrorCount = totalItems - sortedCount,
+                TimeTakenSeconds = elapsedSeconds,
+                ItemsSorted = sortedCount,
+                TotalItems = totalItems,
+                AiEncouragement = aiResponse?.Encouragement ?? "Great sorting!",
+                AiFunMessage = aiResponse?.FunMessage ?? "Organized brilliantly!",
+                AiEffortNote = aiResponse?.EffortNote ?? "Keep it up!",
+                RecommendedDifficulty = GetDifficultyName((int)(aiResponse?.NextDifficultyLevel ?? selectedLevel)),
+                AiConfidence = aiResponse?.Confidence ?? 0.7,
+                StartTime = gameStartTime,
+                EndTime = DateTime.UtcNow,
+                Notes = $"Sorting Task - Level {selectedLevel} - {sortedCount}/{totalItems} sorted in {elapsedSeconds}s"
+            };
+
+            var apiUrl = $"{NavigationManager.BaseUri}api/json-stats/save";
+            var response = await Http.PostAsJsonAsync(apiUrl, autosaveRequest);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                Logger?.LogInformation("? Game result autosaved to JSON (SortingTask)");
+            }
+            else
+            {
+                Logger?.LogWarning($"?? JSON autosave returned status: {response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"? JSON autosave failed: {ex.Message}");
+        }
+    }
+
+    private string GetDifficultyName(int level) => level switch
+    {
+        1 => "Easy",
+        2 => "Medium",
+        3 => "Hard",
+        _ => "Unknown"
+    };
+
+    private async Task<int> GetCurrentUserIdAsync()
+    {
+        try
+        {
+            var userIdStr = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "userId");
+            return int.TryParse(userIdStr, out var id) ? id : 1;
+        }
+        catch { return 1; }
+    }
+
+    private async Task<string> GetCurrentUsernameAsync()
+    {
+        try
+        {
+            var username = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "username");
+            return !string.IsNullOrEmpty(username) ? username : "Guest";
+        }
+        catch { return "Guest"; }
+    }
+
+    private async Task SaveGameSessionAsync()
+    {
+        try
+        {
+            var session = new GameSession
+            {
+                UserId = currentUserId,
+                ProfileId = currentProfileId,
+                GameType = "SortingTask",
+                Difficulty = selectedLevel,
+                Status = "Completed",
+                TimeStarted = gameStartTime,
+                TimeCompleted = DateTime.UtcNow,
+                TotalSeconds = elapsedSeconds,
+                TotalMoves = totalItems,
+                CorrectMatches = sortedCount,
+                Accuracy = (decimal)(_gameSessionResult?.AccuracyPercentage ?? 0),
+                PerformanceScore = (int)(_gameSessionResult?.OverallScore ?? 0),
+                EfficiencyScore = (decimal)(100 - Math.Min(elapsedSeconds / 3.0, 50)),
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                Notes = $"Sorting Task - Level {selectedLevel} - {sortedCount}/{totalItems} sorted in {elapsedSeconds}s"
+            };
+
+            // Save via local repository
+            await SessionRepository.CreateSessionAsync(session);
+            
+            // Also save via HTTP API endpoint for consistency
+            try
+            {
+                var request = new
+                {
+                    UserId = currentUserId,
+                    ProfileId = currentProfileId,
+                    GameType = "SortingTask",
+                    Difficulty = selectedLevel,
+                    TotalSeconds = elapsedSeconds,
+                    TotalMoves = totalItems,
+                    CorrectMatches = sortedCount,
+                    PerformanceScore = (int)(_gameSessionResult?.OverallScore ?? 0)
+                };
+                
+                await Http.PostAsJsonAsync("/api/game/save-session", request);
+                Logger?.LogInformation($"Game session saved via API: SortingTask Level {selectedLevel}");
+            }
+            catch (Exception apiEx)
+            {
+                Logger?.LogWarning($"Failed to save via API (local save succeeded): {apiEx.Message}");
+            }
+            
+            Logger?.LogInformation($"Game session saved: SortingTask Level {selectedLevel} - {sortedCount}/{totalItems} items");
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"Failed to save game session: {ex.Message}");
+        }
+    }
+
+    private void HandleResetGame() {
+        gameStarted = false;
+        gameEnded = false;
+        selectedLevel = 0;
+        sortedCount = 0;
+        selectedItemId = 0;
+        selectedCategory = "";
+        itemList.Clear();
+        categories.Clear();
+        StateHasChanged();
+    }
+}

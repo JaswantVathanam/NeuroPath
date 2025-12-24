@@ -1,0 +1,1324 @@
+@page "/activities/word-puzzles"
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject ActivityAIAnalysisService AIService
+
+<PageTitle>Word Puzzles - NeuroPath</PageTitle>
+
+<div class="activity-container">
+    <div class="activity-header">
+        <button class="back-btn" @onclick="GoBack">
+            <i class="bi bi-arrow-left"></i>
+        </button>
+        <div class="header-info">
+            <h1><i class="bi bi-puzzle"></i> Word Puzzles</h1>
+            <p>Solve anagrams and word challenges</p>
+        </div>
+        <div class="score-display">
+            <div class="score-item">
+                <i class="bi bi-star-fill"></i>
+                <span>@score</span>
+            </div>
+            <div class="score-item">
+                <i class="bi bi-check-circle"></i>
+                <span>@solved / @totalPuzzles</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="game-area">
+        @if (!gameStarted)
+        {
+            <div class="start-screen">
+                <div class="puzzle-icon">
+                    <i class="bi bi-puzzle"></i>
+                </div>
+                <h2>Word Puzzles</h2>
+                <p>Unscramble letters to form words and boost your vocabulary!</p>
+
+                <div class="puzzle-types">
+                    <div class="puzzle-type-card @(puzzleType == "anagram" ? "selected" : "")" 
+                         @onclick="@(() => puzzleType = "anagram")">
+                        <i class="bi bi-shuffle"></i>
+                        <h3>Anagrams</h3>
+                        <p>Rearrange scrambled letters</p>
+                    </div>
+                    <div class="puzzle-type-card @(puzzleType == "missing" ? "selected" : "")" 
+                         @onclick="@(() => puzzleType = "missing")">
+                        <i class="bi bi-input-cursor"></i>
+                        <h3>Missing Letters</h3>
+                        <p>Fill in the blanks</p>
+                    </div>
+                </div>
+
+                <div class="difficulty-selector">
+                    <button class="diff-btn @(difficulty == "easy" ? "selected" : "")" 
+                            @onclick="@(() => difficulty = "easy")">
+                        <span>Easy</span>
+                        <small>4-5 letter words</small>
+                    </button>
+                    <button class="diff-btn @(difficulty == "medium" ? "selected" : "")" 
+                            @onclick="@(() => difficulty = "medium")">
+                        <span>Medium</span>
+                        <small>6-7 letter words</small>
+                    </button>
+                    <button class="diff-btn @(difficulty == "hard" ? "selected" : "")" 
+                            @onclick="@(() => difficulty = "hard")">
+                        <span>Hard</span>
+                        <small>8+ letter words</small>
+                    </button>
+                </div>
+
+                <button class="start-btn" @onclick="StartGame">
+                    <i class="bi bi-play-fill"></i> Start Puzzles
+                </button>
+            </div>
+        }
+        else if (gameOver)
+        {
+            <div class="results-screen">
+                <div class="results-icon">
+                    <i class="bi bi-trophy-fill"></i>
+                </div>
+                <h2>Great Work!</h2>
+
+                <div class="final-stats">
+                    <div class="stat-card">
+                        <i class="bi bi-star-fill"></i>
+                        <span class="stat-value">@score</span>
+                        <span class="stat-label">Points</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="bi bi-check-circle"></i>
+                        <span class="stat-value">@solved</span>
+                        <span class="stat-label">Solved</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="bi bi-lightbulb"></i>
+                        <span class="stat-value">@hintsUsed</span>
+                        <span class="stat-label">Hints Used</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="bi bi-percent"></i>
+                        <span class="stat-value">@accuracy%</span>
+                        <span class="stat-label">Accuracy</span>
+                    </div>
+                </div>
+
+                <div class="words-learned">
+                    <h3>Words Solved</h3>
+                    <div class="word-tags">
+                        @foreach (var word in solvedWords)
+                        {
+                            <span class="word-tag">@word</span>
+                        }
+                    </div>
+                </div>
+
+                <!-- AI Feedback Section -->
+                <div class="ai-feedback-section">
+                    @if (isLoadingAIFeedback)
+                    {
+                        <div class="ai-loading">
+                            <i class="bi bi-robot spinning"></i>
+                            <span>AI is analyzing your word skills...</span>
+                        </div>
+                    }
+                    else if (aiAnalysis != null)
+                    {
+                        <div class="ai-feedback">
+                            <div class="ai-header">
+                                <i class="bi bi-robot"></i>
+                                <span>AI Language Coach</span>
+                            </div>
+                            <div class="ai-content">
+                                <p>@aiAnalysis.Feedback</p>
+                                @if (!string.IsNullOrEmpty(aiAnalysis.Recommendation))
+                                {
+                                    <div class="ai-recommendation">
+                                        <strong><i class="bi bi-lightbulb"></i> Recommendation:</strong>
+                                        <span>@aiAnalysis.Recommendation</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="result-actions">
+                    <button class="action-btn primary" @onclick="StartGame">
+                        <i class="bi bi-arrow-repeat"></i> Play Again
+                    </button>
+                    <button class="action-btn secondary" @onclick="ResetToMenu">
+                        <i class="bi bi-gear"></i> Change Settings
+                    </button>
+                    <button class="action-btn tertiary" @onclick="GoBack">
+                        <i class="bi bi-grid"></i> All Activities
+                    </button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="puzzle-area">
+                <div class="puzzle-progress">
+                    <span>Puzzle @(currentPuzzleIndex + 1) of @totalPuzzles</span>
+                    <div class="progress-dots">
+                        @for (int i = 0; i < totalPuzzles; i++)
+                        {
+                            var idx = i;
+                            <span class="dot @(idx < currentPuzzleIndex ? "completed" : idx == currentPuzzleIndex ? "current" : "")"></span>
+                        }
+                    </div>
+                </div>
+
+                <div class="puzzle-card">
+                    @if (puzzleType == "anagram")
+                    {
+                        <div class="puzzle-hint-text">
+                            <i class="bi bi-lightbulb"></i> @currentHint
+                        </div>
+
+                        <div class="scrambled-letters">
+                            @foreach (var letter in scrambledLetters)
+                            {
+                                <div class="letter-tile @(usedIndices.Contains(scrambledLetters.IndexOf(letter) + usedIndices.Count(x => x < scrambledLetters.IndexOf(letter))) ? "used" : "")"
+                                     @onclick="() => AddLetter(letter, scrambledLetters.IndexOf(letter))">
+                                    @letter
+                                </div>
+                            }
+                        </div>
+
+                        <div class="answer-slots">
+                            @for (int i = 0; i < currentWord.Length; i++)
+                            {
+                                <div class="answer-slot @(i < userAnswer.Length ? "filled" : "")">
+                                    @(i < userAnswer.Length ? userAnswer[i].ToString() : "")
+                                </div>
+                            }
+                        </div>
+
+                        <div class="puzzle-actions">
+                            <button class="action-btn clear" @onclick="ClearAnswer">
+                                <i class="bi bi-arrow-counterclockwise"></i> Clear
+                            </button>
+                            <button class="action-btn hint" @onclick="UseHint" disabled="@(revealedLetters >= currentWord.Length - 1)">
+                                <i class="bi bi-lightbulb"></i> Hint (@(currentWord.Length - 1 - revealedLetters) left)
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="puzzle-hint-text">
+                            <i class="bi bi-lightbulb"></i> @currentHint
+                        </div>
+
+                        <div class="missing-word-display">
+                            @foreach (var charInfo in missingWordDisplay)
+                            {
+                                @if (charInfo.IsBlank)
+                                {
+                                    <input type="text" 
+                                           class="missing-input @(showResult && charInfo.UserInput?.ToUpper() != charInfo.Char.ToString().ToUpper() ? "error" : "") @(showResult && charInfo.UserInput?.ToUpper() == charInfo.Char.ToString().ToUpper() ? "correct" : "")"
+                                           maxlength="1"
+                                           value="@charInfo.UserInput"
+                                           @oninput="(e) => OnMissingLetterInput(e, charInfo)" />
+                                }
+                                else
+                                {
+                                    <span class="missing-char">@charInfo.Char</span>
+                                }
+                            }
+                        </div>
+                    }
+
+                    @if (showFeedback)
+                    {
+                        <div class="feedback @(isCorrect ? "correct" : "incorrect")">
+                            @if (isCorrect)
+                            {
+                                <i class="bi bi-check-circle-fill"></i>
+                                <span>Correct! The word is "@currentWord"</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-x-circle-fill"></i>
+                                <span>Not quite! The word was "@currentWord"</span>
+                            }
+                        </div>
+                    }
+
+                    <button class="submit-btn" @onclick="CheckAnswer" disabled="@(showFeedback || (puzzleType == "anagram" && userAnswer.Length != currentWord.Length))">
+                        <i class="bi bi-check-lg"></i> Check Answer
+                    </button>
+                </div>
+
+                <button class="skip-btn" @onclick="SkipPuzzle">
+                    <i class="bi bi-skip-forward"></i> Skip Puzzle
+                </button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private bool gameStarted = false;
+    private bool gameOver = false;
+    private bool showFeedback = false;
+    private bool showResult = false;
+    private bool isCorrect = false;
+    private string puzzleType = "anagram";
+    private string difficulty = "medium";
+    private string currentWord = "";
+    private string currentHint = "";
+    private string userAnswer = "";
+    private List<char> scrambledLetters = new();
+    private List<int> usedIndices = new();
+    private int score = 0;
+    private int solved = 0;
+    private int totalPuzzles = 10;
+    private int currentPuzzleIndex = 0;
+    private int hintsUsed = 0;
+    private int revealedLetters = 0;
+    private int accuracy = 0;
+    private List<string> solvedWords = new();
+    private List<MissingChar> missingWordDisplay = new();
+    private Random random = new();
+    
+    // User info from localStorage
+    private int userId = 0;
+    private string username = "";
+    
+    // AI Analysis variables
+    private ActivityAIResult? aiAnalysis;
+    private bool isLoadingAIFeedback = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var userIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+                var usernameStr = await JS.InvokeAsync<string>("localStorage.getItem", "username");
+                
+                if (!string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out var parsedId))
+                {
+                    userId = parsedId;
+                }
+                username = usernameStr ?? "";
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading user info: {ex.Message}");
+            }
+        }
+    }
+
+    private class ActivityAIResult
+    {
+        public string Feedback { get; set; } = "";
+        public string Recommendation { get; set; } = "";
+        public int CognitiveScore { get; set; }
+        public List<string> StrengthAreas { get; set; } = new();
+        public List<string> ImprovementAreas { get; set; } = new();
+    }
+
+    private class MissingChar
+    {
+        public char Char { get; set; }
+        public bool IsBlank { get; set; }
+        public string? UserInput { get; set; }
+    }
+
+    private Dictionary<string, List<(string word, string hint)>> easyWords = new()
+    {
+        { "anagram", new() { ("BOOK", "Something to read"), ("TREE", "Grows in a forest"), ("FISH", "Lives in water"), ("BIRD", "Has wings and feathers"), ("MOON", "Shines at night"), ("STAR", "Twinkles in the sky"), ("RAIN", "Falls from clouds"), ("SNOW", "White and cold"), ("CAKE", "Birthday dessert"), ("BLUE", "Color of the sky") } },
+        { "missing", new() { ("APPLE", "A red or green fruit"), ("HOUSE", "Where you live"), ("HAPPY", "Feeling of joy"), ("BEACH", "Sandy shore by the sea"), ("MUSIC", "Art of sound"), ("DANCE", "Move to rhythm"), ("SMILE", "Happy expression"), ("CLOUD", "Floats in the sky"), ("DREAM", "Happens when sleeping"), ("LIGHT", "Opposite of dark") } }
+    };
+
+    private Dictionary<string, List<(string word, string hint)>> mediumWords = new()
+    {
+        { "anagram", new() { ("PLANET", "Earth is one"), ("GARDEN", "Where flowers grow"), ("BRIDGE", "Crosses over water"), ("CASTLE", "Medieval fortress"), ("ISLAND", "Land surrounded by water"), ("JUNGLE", "Dense tropical forest"), ("MUSEUM", "Houses artifacts"), ("PALACE", "Royal residence"), ("SUNSET", "Evening sky colors"), ("WINTER", "Cold season") } },
+        { "missing", new() { ("FREEDOM", "State of being free"), ("BALANCE", "State of equilibrium"), ("COMFORT", "Feeling of ease"), ("DIAMOND", "Precious gemstone"), ("EXPLORE", "To discover"), ("FANTASY", "Imaginative fiction"), ("GRATITUDE", "Being thankful"), ("HARMONY", "Musical agreement"), ("IMAGINE", "To form mental images"), ("JOURNEY", "A trip or travel") } }
+    };
+
+    private Dictionary<string, List<(string word, string hint)>> hardWords = new()
+    {
+        { "anagram", new() { ("CHOCOLATE", "Sweet brown treat"), ("ADVENTURE", "Exciting journey"), ("BEAUTIFUL", "Pleasing to the eye"), ("CELEBRATE", "Mark a special occasion"), ("DANGEROUS", "Full of risk"), ("EDUCATION", "Process of learning"), ("FANTASTIC", "Extraordinarily good"), ("HAPPINESS", "State of joy"), ("IMPORTANT", "Of great significance"), ("KNOWLEDGE", "Facts and information") } },
+        { "missing", new() { ("BUTTERFLY", "Colorful insect with wings"), ("COMMUNITY", "Group of people living together"), ("DISCOVERY", "Act of finding something new"), ("ELEPHANTS", "Large animals with trunks"), ("FURNITURE", "Tables, chairs, etc."), ("GYMNASTICS", "Athletic exercises"), ("HURRICANE", "Powerful storm"), ("INVISIBLE", "Cannot be seen"), ("JOURNALISM", "News reporting"), ("KALEIDOSCOPE", "Colorful optical toy") } }
+    };
+
+    private void StartGame()
+    {
+        gameStarted = true;
+        gameOver = false;
+        score = 0;
+        solved = 0;
+        currentPuzzleIndex = 0;
+        hintsUsed = 0;
+        solvedWords.Clear();
+        
+        LoadNextPuzzle();
+    }
+
+    private void LoadNextPuzzle()
+    {
+        showFeedback = false;
+        showResult = false;
+        userAnswer = "";
+        usedIndices.Clear();
+        revealedLetters = 0;
+        missingWordDisplay.Clear();
+
+        var wordList = difficulty switch
+        {
+            "easy" => easyWords[puzzleType],
+            "medium" => mediumWords[puzzleType],
+            _ => hardWords[puzzleType]
+        };
+
+        var puzzle = wordList[random.Next(wordList.Count)];
+        currentWord = puzzle.word;
+        currentHint = puzzle.hint;
+
+        if (puzzleType == "anagram")
+        {
+            scrambledLetters = currentWord.ToCharArray().OrderBy(x => random.Next()).ToList();
+            // Make sure it's not the same as the answer
+            while (new string(scrambledLetters.ToArray()) == currentWord)
+            {
+                scrambledLetters = currentWord.ToCharArray().OrderBy(x => random.Next()).ToList();
+            }
+        }
+        else
+        {
+            // Missing letters - hide 30-50% of letters
+            var indicesToHide = new List<int>();
+            var hideCount = (int)(currentWord.Length * 0.4);
+            while (indicesToHide.Count < hideCount)
+            {
+                var idx = random.Next(currentWord.Length);
+                if (!indicesToHide.Contains(idx))
+                    indicesToHide.Add(idx);
+            }
+
+            for (int i = 0; i < currentWord.Length; i++)
+            {
+                missingWordDisplay.Add(new MissingChar
+                {
+                    Char = currentWord[i],
+                    IsBlank = indicesToHide.Contains(i),
+                    UserInput = null
+                });
+            }
+        }
+    }
+
+    private void AddLetter(char letter, int originalIndex)
+    {
+        if (showFeedback || userAnswer.Length >= currentWord.Length) return;
+
+        // Find the actual index accounting for already used letters
+        var actualIndex = 0;
+        var count = 0;
+        for (int i = 0; i < scrambledLetters.Count; i++)
+        {
+            if (!usedIndices.Contains(i))
+            {
+                if (count == originalIndex - usedIndices.Count(x => x < i))
+                {
+                    actualIndex = i;
+                    break;
+                }
+                count++;
+            }
+        }
+
+        usedIndices.Add(actualIndex);
+        userAnswer += letter;
+    }
+
+    private void ClearAnswer()
+    {
+        userAnswer = "";
+        usedIndices.Clear();
+    }
+
+    private void UseHint()
+    {
+        if (revealedLetters >= currentWord.Length - 1) return;
+        
+        hintsUsed++;
+        revealedLetters++;
+        
+        // Add the next correct letter
+        if (userAnswer.Length < currentWord.Length)
+        {
+            var nextLetter = currentWord[userAnswer.Length];
+            userAnswer += nextLetter;
+            
+            // Find and mark the letter as used
+            for (int i = 0; i < scrambledLetters.Count; i++)
+            {
+                if (scrambledLetters[i] == nextLetter && !usedIndices.Contains(i))
+                {
+                    usedIndices.Add(i);
+                    break;
+                }
+            }
+        }
+    }
+
+    private void OnMissingLetterInput(ChangeEventArgs e, MissingChar charInfo)
+    {
+        charInfo.UserInput = e.Value?.ToString()?.ToUpper();
+    }
+
+    private async Task CheckAnswer()
+    {
+        if (showFeedback) return;
+
+        if (puzzleType == "anagram")
+        {
+            isCorrect = userAnswer.Equals(currentWord, StringComparison.OrdinalIgnoreCase);
+        }
+        else
+        {
+            isCorrect = missingWordDisplay.All(c => !c.IsBlank || c.UserInput?.ToUpper() == c.Char.ToString().ToUpper());
+            showResult = true;
+        }
+
+        showFeedback = true;
+
+        if (isCorrect)
+        {
+            solved++;
+            var pointsEarned = difficulty switch
+            {
+                "easy" => 10,
+                "medium" => 20,
+                _ => 30
+            };
+            pointsEarned -= hintsUsed * 2;
+            pointsEarned = Math.Max(pointsEarned, 5);
+            score += pointsEarned;
+            solvedWords.Add(currentWord);
+        }
+
+        StateHasChanged();
+        await Task.Delay(2000);
+
+        currentPuzzleIndex++;
+        if (currentPuzzleIndex >= totalPuzzles)
+        {
+            await EndGame();
+        }
+        else
+        {
+            LoadNextPuzzle();
+        }
+    }
+
+    private async Task SkipPuzzle()
+    {
+        currentPuzzleIndex++;
+        if (currentPuzzleIndex >= totalPuzzles)
+        {
+            await EndGame();
+        }
+        else
+        {
+            LoadNextPuzzle();
+        }
+    }
+
+    private async Task EndGame()
+    {
+        gameOver = true;
+        accuracy = totalPuzzles > 0 ? (int)((double)solved / totalPuzzles * 100) : 0;
+        await SaveActivitySession();
+        await LoadAIFeedback();
+    }
+
+    private async Task LoadAIFeedback()
+    {
+        isLoadingAIFeedback = true;
+        StateHasChanged();
+
+        try
+        {
+            var session = new AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession
+            {
+                UserId = 1,
+                ActivityType = "WordPuzzles",
+                StartTime = DateTime.UtcNow.AddMinutes(-15),
+                EndTime = DateTime.UtcNow,
+                DurationSeconds = 900,
+                Score = score,
+                Accuracy = accuracy,
+                Difficulty = difficulty,
+                ActivityData = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    puzzleType,
+                    totalPuzzles,
+                    solved,
+                    hintsUsed,
+                    solvedWords,
+                    averageWordLength = solvedWords.Count > 0 ? solvedWords.Average(w => w.Length) : 0
+                })
+            };
+
+            var result = await AIService.AnalyzeActivityPerformanceAsync(session, new List<AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession>());
+            aiAnalysis = new ActivityAIResult
+            {
+                Feedback = result.Encouragement,
+                Recommendation = result.PatternAnalysis,
+                CognitiveScore = 0,
+                StrengthAreas = result.CognitiveStrengths,
+                ImprovementAreas = result.AreasForGrowth
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"AI analysis error: {ex.Message}");
+            aiAnalysis = new ActivityAIResult
+            {
+                Feedback = accuracy >= 80 
+                    ? "Excellent vocabulary skills! You quickly unscrambled the words." 
+                    : accuracy >= 60 
+                    ? "Good word recognition! Your language skills are improving." 
+                    : "Keep practicing! Word puzzles strengthen vocabulary and spelling.",
+                Recommendation = hintsUsed == 0 
+                    ? "Amazing work without hints! Try harder difficulty levels." 
+                    : "Try to solve more puzzles without hints to boost your word recognition."
+            };
+        }
+        finally
+        {
+            isLoadingAIFeedback = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveActivitySession()
+    {
+        try
+        {
+            var activityData = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                puzzleType = puzzleType,
+                totalPuzzles = totalPuzzles,
+                solved = solved,
+                hintsUsed = hintsUsed,
+                solvedWords = solvedWords,
+                difficulty = difficulty
+            });
+
+            var session = new
+            {
+                userId = userId,
+                username = username,
+                activityType = "WordPuzzles",
+                activityName = "Word Puzzles",
+                durationSeconds = 900,
+                score = score,
+                accuracy = (decimal)accuracy,
+                completionPercentage = 100,
+                difficulty = difficulty,
+                activityData = activityData,
+                moodBefore = "",
+                moodAfter = ""
+            };
+
+            var apiUrl = $"{Navigation.BaseUri}api/activities/save";
+            await Http.PostAsJsonAsync(apiUrl, session);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to save activity session: {ex.Message}");
+        }
+    }
+
+    private void ResetToMenu()
+    {
+        gameStarted = false;
+        gameOver = false;
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/games");
+    }
+}
+
+<style>
+    .activity-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%);
+    }
+
+    .activity-header {
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        color: white;
+        padding: 1.5rem 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .back-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        border: 2px solid rgba(255,255,255,0.3);
+        background: rgba(255,255,255,0.1);
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        transition: all 200ms;
+    }
+
+    .back-btn:hover {
+        background: rgba(255,255,255,0.2);
+    }
+
+    .header-info {
+        flex-grow: 1;
+    }
+
+    .header-info h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .header-info p {
+        margin: 0.25rem 0 0;
+        opacity: 0.9;
+        font-size: 0.9rem;
+    }
+
+    .score-display {
+        display: flex;
+        gap: 1rem;
+    }
+
+    .score-item {
+        background: rgba(255,255,255,0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 1.125rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .game-area {
+        max-width: 650px;
+        margin: 2rem auto;
+        padding: 0 1.5rem;
+    }
+
+    .start-screen, .results-screen {
+        background: white;
+        border-radius: 24px;
+        padding: 2.5rem;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+
+    .puzzle-icon, .results-icon {
+        width: 100px;
+        height: 100px;
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 3rem;
+        color: white;
+    }
+
+    .results-icon {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+
+    .start-screen h2, .results-screen h2 {
+        margin: 0 0 0.5rem;
+        font-size: 1.75rem;
+        color: #1f2937;
+    }
+
+    .start-screen > p {
+        color: #6b7280;
+        margin-bottom: 2rem;
+    }
+
+    .puzzle-types {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .puzzle-type-card {
+        padding: 1.5rem;
+        background: #f9fafb;
+        border: 2px solid #e5e7eb;
+        border-radius: 16px;
+        cursor: pointer;
+        transition: all 200ms;
+    }
+
+    .puzzle-type-card:hover {
+        border-color: #ec4899;
+        background: #fdf2f8;
+    }
+
+    .puzzle-type-card.selected {
+        border-color: #ec4899;
+        background: #fdf2f8;
+        box-shadow: 0 0 0 4px rgba(236, 72, 153, 0.2);
+    }
+
+    .puzzle-type-card i {
+        font-size: 2rem;
+        color: #ec4899;
+        margin-bottom: 0.5rem;
+    }
+
+    .puzzle-type-card h3 {
+        margin: 0 0 0.25rem;
+        color: #1f2937;
+        font-size: 1rem;
+    }
+
+    .puzzle-type-card p {
+        margin: 0;
+        color: #6b7280;
+        font-size: 0.875rem;
+    }
+
+    .difficulty-selector {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: center;
+        margin-bottom: 2rem;
+    }
+
+    .diff-btn {
+        padding: 1rem 1.5rem;
+        background: #f9fafb;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 200ms;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .diff-btn:hover {
+        border-color: #ec4899;
+        background: #fdf2f8;
+    }
+
+    .diff-btn.selected {
+        border-color: #ec4899;
+        background: #fdf2f8;
+        box-shadow: 0 0 0 4px rgba(236, 72, 153, 0.2);
+    }
+
+    .diff-btn span {
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .diff-btn small {
+        font-size: 0.75rem;
+        color: #6b7280;
+    }
+
+    .start-btn {
+        padding: 1rem 3rem;
+        font-size: 1.25rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        color: white;
+        border: none;
+        border-radius: 16px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        transition: all 300ms;
+    }
+
+    .start-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 30px rgba(236, 72, 153, 0.4);
+    }
+
+    .puzzle-area {
+        text-align: center;
+    }
+
+    .puzzle-progress {
+        margin-bottom: 1.5rem;
+    }
+
+    .puzzle-progress > span {
+        color: #be185d;
+        font-weight: 600;
+    }
+
+    .progress-dots {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+    }
+
+    .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #e5e7eb;
+    }
+
+    .dot.completed {
+        background: #10b981;
+    }
+
+    .dot.current {
+        background: #ec4899;
+        animation: pulse 1.5s infinite;
+    }
+
+    .puzzle-card {
+        background: white;
+        border-radius: 24px;
+        padding: 2rem;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        margin-bottom: 1rem;
+    }
+
+    .puzzle-hint-text {
+        background: #fdf2f8;
+        padding: 1rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        color: #be185d;
+    }
+
+    .puzzle-hint-text i {
+        color: #f59e0b;
+    }
+
+    .scrambled-letters {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.75rem;
+        margin-bottom: 2rem;
+    }
+
+    .letter-tile {
+        width: 50px;
+        height: 50px;
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.5rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 200ms;
+        box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3);
+    }
+
+    .letter-tile:hover:not(.used) {
+        transform: scale(1.1);
+    }
+
+    .letter-tile.used {
+        opacity: 0.3;
+        cursor: default;
+        transform: scale(0.9);
+    }
+
+    .answer-slots {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .answer-slot {
+        width: 45px;
+        height: 50px;
+        border: 3px solid #e5e7eb;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1f2937;
+        background: #f9fafb;
+    }
+
+    .answer-slot.filled {
+        border-color: #ec4899;
+        background: #fdf2f8;
+    }
+
+    .puzzle-actions {
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .puzzle-actions .action-btn {
+        padding: 0.75rem 1.5rem;
+        border-radius: 10px;
+        font-family: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .puzzle-actions .action-btn.clear {
+        background: #f3f4f6;
+        border: 2px solid #e5e7eb;
+        color: #6b7280;
+    }
+
+    .puzzle-actions .action-btn.hint {
+        background: #fef3c7;
+        border: 2px solid #fcd34d;
+        color: #92400e;
+    }
+
+    .puzzle-actions .action-btn.hint:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .missing-word-display {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 2rem;
+    }
+
+    .missing-char {
+        width: 40px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .missing-input {
+        width: 40px;
+        height: 50px;
+        border: 3px solid #e5e7eb;
+        border-radius: 10px;
+        text-align: center;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1f2937;
+        font-family: inherit;
+        text-transform: uppercase;
+    }
+
+    .missing-input:focus {
+        outline: none;
+        border-color: #ec4899;
+    }
+
+    .missing-input.correct {
+        border-color: #10b981;
+        background: #ecfdf5;
+        color: #047857;
+    }
+
+    .missing-input.error {
+        border-color: #ef4444;
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+    .feedback {
+        padding: 1rem;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        font-weight: 600;
+    }
+
+    .feedback.correct {
+        background: #ecfdf5;
+        color: #047857;
+    }
+
+    .feedback.incorrect {
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+    .submit-btn {
+        width: 100%;
+        padding: 1rem;
+        font-size: 1.125rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .submit-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(236, 72, 153, 0.3);
+    }
+
+    .submit-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .skip-btn {
+        width: 100%;
+        padding: 0.875rem;
+        background: transparent;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        color: #6b7280;
+        font-family: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .skip-btn:hover {
+        border-color: #9ca3af;
+        color: #374151;
+    }
+
+    .final-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin: 2rem 0;
+    }
+
+    .stat-card {
+        background: #f9fafb;
+        border-radius: 16px;
+        padding: 1.25rem;
+    }
+
+    .stat-card i {
+        font-size: 1.5rem;
+        color: #ec4899;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-card .stat-value {
+        display: block;
+        font-size: 2rem;
+        font-weight: 800;
+        color: #1f2937;
+    }
+
+    .stat-card .stat-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .words-learned {
+        background: #fdf2f8;
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .words-learned h3 {
+        margin: 0 0 1rem;
+        color: #be185d;
+    }
+
+    .word-tags {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .word-tag {
+        background: white;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    .result-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .result-actions .action-btn {
+        padding: 1rem;
+        border-radius: 12px;
+        font-family: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .result-actions .action-btn.primary {
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        color: white;
+        border: none;
+    }
+
+    .result-actions .action-btn.primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(236, 72, 153, 0.3);
+    }
+
+    .result-actions .action-btn.secondary {
+        background: #fdf2f8;
+        color: #be185d;
+        border: none;
+    }
+
+    .result-actions .action-btn.tertiary {
+        background: white;
+        border: 2px solid #e5e7eb;
+        color: #6b7280;
+    }
+
+    @@keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.2); }
+    }
+
+    /* AI Feedback Styles */
+    .ai-feedback-section {
+        margin: 1.5rem 0;
+    }
+
+    .ai-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        padding: 1.5rem;
+        background: #fdf2f8;
+        border-radius: 12px;
+        color: #be185d;
+    }
+
+    .ai-loading .spinning {
+        animation: spin 1s linear infinite;
+    }
+
+    .ai-feedback {
+        background: linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%);
+        border: 1px solid #fbcfe8;
+        border-radius: 16px;
+        overflow: hidden;
+    }
+
+    .ai-header {
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        color: white;
+        padding: 0.75rem 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+    }
+
+    .ai-content {
+        padding: 1.25rem;
+    }
+
+    .ai-content p {
+        margin: 0 0 1rem;
+        color: #be185d;
+        line-height: 1.6;
+    }
+
+    .ai-recommendation {
+        background: white;
+        padding: 1rem;
+        border-radius: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .ai-recommendation strong {
+        color: #db2777;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .ai-recommendation span {
+        color: #374151;
+    }
+
+    @@keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+</style>

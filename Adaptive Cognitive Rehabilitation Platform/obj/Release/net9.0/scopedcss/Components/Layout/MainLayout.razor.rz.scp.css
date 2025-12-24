@@ -1,0 +1,117 @@
+.page[b-7qdbwvxqzf] {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: linear-gradient(135deg, var(--bg-light) 0%, #F5F3FF 100%);
+}
+
+.main-container[b-7qdbwvxqzf] {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+main[b-7qdbwvxqzf] {
+    flex: 1;
+    padding: var(--spacing-lg);
+    max-width: 1400px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.sidebar[b-7qdbwvxqzf] {
+    background: linear-gradient(180deg, var(--primary-color) 0%, #9D8FBD 100%);
+    box-shadow: 2px 0 8px var(--shadow-color);
+}
+
+.footer[b-7qdbwvxqzf] {
+    background: linear-gradient(90deg, rgba(180, 167, 214, 0.1) 0%, rgba(168, 216, 234, 0.1) 100%);
+    border-top: 2px solid var(--border-color);
+    padding: var(--spacing-md) !important;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.footer p[b-7qdbwvxqzf] {
+    margin: 0.25rem 0;
+}
+
+#blazor-error-ui[b-7qdbwvxqzf] {
+    color-scheme: light;
+    background: transparent;
+    bottom: 0;
+    left: 0;
+    padding: var(--spacing-lg);
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+    display: none;
+    animation: slideInUp-b-7qdbwvxqzf 0.3s ease-in-out;
+}
+
+#blazor-error-ui.shown[b-7qdbwvxqzf] {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+#blazor-error-ui .alert[b-7qdbwvxqzf] {
+    max-width: 500px;
+    box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.2);
+}
+
+#blazor-error-ui .dismiss[b-7qdbwvxqzf] {
+    cursor: pointer;
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+@keyframes slideInUp-b-7qdbwvxqzf {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+    .page[b-7qdbwvxqzf] {
+        flex-direction: column;
+    }
+
+    .sidebar[b-7qdbwvxqzf] {
+        width: 100%;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    main[b-7qdbwvxqzf] {
+        padding: var(--spacing-md);
+    }
+}
+
+@media (min-width: 641px) {
+    .page[b-7qdbwvxqzf] {
+        flex-direction: row;
+    }
+
+    .sidebar[b-7qdbwvxqzf] {
+        width: 280px;
+        height: 100vh;
+        position: sticky;
+        top: 0;
+        overflow-y: auto;
+    }
+
+    main[b-7qdbwvxqzf] {
+        flex: 1;
+    }
+}

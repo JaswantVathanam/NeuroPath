@@ -1,0 +1,954 @@
+@page "/games/memory-match"
+@using Microsoft.AspNetCore.Components.Web
+@using Adaptive_Cognitive_Rehabilitation_Platform.Components
+@using AdaptiveCognitiveRehabilitationPlatform.Services
+@using NeuroPath.Models
+@using AdaptiveCognitiveRehabilitationPlatform.Services.GameAnalytics
+@inject ILogger<MemoryMatch> Logger
+@inject GameStatisticsService StatsService
+@inject GameAiAnalysisService AiService
+@inject IGameSessionRepository SessionRepository
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Memory Match</PageTitle>
+
+<div class="mm-container">
+    @if (!gameStarted)
+    {
+        <!-- Level Selection Screen -->
+        <div class="mm-selection">
+            <div class="mm-header">
+                <h1><i class="bi bi-memory"></i> Memory Match</h1>
+                <p>Match pairs and train your memory!</p>
+            </div>
+
+            <div class="mm-levels">
+                <button class="mm-level-btn @(selectedLevel == 1 ? "active" : "")" 
+                        @onclick="() => HandleSelectLevel(1)">
+                    <i class="bi bi-flower2"></i>
+                    <strong>Easy</strong>
+                    <small>4×4</small>
+                </button>
+                <button class="mm-level-btn @(selectedLevel == 2 ? "active" : "")" 
+                        @onclick="() => HandleSelectLevel(2)">
+                    <i class="bi bi-tree-fill"></i>
+                    <strong>Medium</strong>
+                    <small>5×4</small>
+                </button>
+                <button class="mm-level-btn @(selectedLevel == 3 ? "active" : "")" 
+                        @onclick="() => HandleSelectLevel(3)">
+                    <i class="bi bi-fire"></i>
+                    <strong>Hard</strong>
+                    <small>6×4</small>
+                </button>
+            </div>
+
+            <button class="mm-start-btn" 
+                    @onclick="HandleStartGame"
+                    disabled="@(selectedLevel == 0)">
+                <i class="bi bi-play-fill"></i> START GAME
+            </button>
+        </div>
+    }
+    else if (gameStarted && !gameEnded && !aiAnalyzing)
+    {
+        <!-- Game Board -->
+        <div class="mm-game">
+            <div class="mm-info">
+                <div class="mm-stat">
+                    <span class="mm-label">Moves</span>
+                    <span class="mm-value">@moves</span>
+                </div>
+                <div class="mm-stat">
+                    <span class="mm-label">Matched</span>
+                    <span class="mm-value">@cardList.Count(c => c.IsMatched)/@totalPairs</span>
+                </div>
+                <div class="mm-stat">
+                    <span class="mm-label">Time</span>
+                    <span class="mm-value">@elapsedSeconds<small>s</small></span>
+                </div>
+            </div>
+
+            <div class="mm-board" style="grid-template-columns: repeat(@gridCols, 1fr);">
+                @foreach (var card in cardList)
+                {
+                    <button class="mm-card @(card.IsFlipped ? "flipped" : "") @(card.IsMatched ? "matched" : "")"
+                            @onclick="@((MouseEventArgs e) => HandleFlipCard(card.Id))"
+                            disabled="@(card.IsMatched || isProcessing)">
+                        @if (card.IsFlipped || card.IsMatched)
+                        {
+                            <span>@card.Symbol</span>
+                        }
+                        else
+                        {
+                            <span>?</span>
+                        }
+                    </button>
+                }
+            </div>
+        </div>
+    }
+    else if (aiAnalyzing)
+    {
+        <!-- AI Analysis Loading -->
+        <div class="mm-analyzing">
+            <div class="mm-spinner"></div>
+            <h3>AI is analyzing your performance...</h3>
+            <p>Generating personalized feedback and recommendations</p>
+        </div>
+    }
+    else if (gameEnded && _aiResponse != null)
+    {
+        <!-- AI Results Screen -->
+        <div class="mm-results">
+            <div class="mm-results-header">
+                <h2><i class="bi bi-trophy-fill"></i> Game Complete!</h2>
+            </div>
+
+            <div class="mm-score-display">
+                <div class="mm-score-circle">
+                    <span class="mm-score-value">@_aiResponse.PerformanceScore.ToString("F0")</span>
+                    <span class="mm-score-label">Score</span>
+                </div>
+            </div>
+
+            <div class="mm-stats-summary">
+                <div class="mm-stat-card">
+                    <i class="bi bi-bullseye"></i>
+                    <div>
+                        <div class="mm-stat-title">Moves</div>
+                        <div class="mm-stat-detail">@moves moves</div>
+                    </div>
+                </div>
+                <div class="mm-stat-card">
+                    <i class="bi bi-hourglass"></i>
+                    <div>
+                        <div class="mm-stat-title">Time</div>
+                        <div class="mm-stat-detail">@elapsedSeconds seconds</div>
+                    </div>
+                </div>
+                <div class="mm-stat-card">
+                    <i class="bi bi-percent"></i>
+                    <div>
+                        <div class="mm-stat-title">Efficiency</div>
+                        <div class="mm-stat-detail">@(moves > 0 ? ((double)totalPairs / moves * 100).ToString("F0") : 0)%</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mm-ai-feedback">
+                <div class="mm-feedback-section">
+                    <h3><i class="bi bi-heart-fill"></i> Encouragement</h3>
+                    <p>@_aiResponse.Encouragement</p>
+                </div>
+
+                <div class="mm-feedback-section">
+                    <h3><i class="bi bi-chat-dots-fill"></i> Fun Message</h3>
+                    <p>@_aiResponse.FunMessage</p>
+                </div>
+
+                <div class="mm-feedback-section">
+                    <h3><i class="bi bi-bar-chart-fill"></i> Your Effort</h3>
+                    <p>@_aiResponse.EffortNote</p>
+                </div>
+
+                @if (_aiResponse.NextDifficultyLevel > selectedLevel)
+                {
+                    <div class="mm-feedback-section mm-next-level">
+                        <h3><i class="bi bi-arrow-up-circle-fill"></i> Ready for Next Level?</h3>
+                        <p>The AI recommends trying <strong>Level @_aiResponse.NextDifficultyLevel</strong> next!</p>
+                        <p class="mm-confidence">AI Confidence: @(_aiResponse.Confidence * 100).ToString("F0")%</p>
+                    </div>
+                }
+            </div>
+
+            <div class="mm-actions">
+                <button class="mm-btn mm-btn-secondary" @onclick="HandleResetGame">
+                    <i class="bi bi-arrow-clockwise"></i> Play Again
+                </button>
+                <button class="mm-btn mm-btn-primary" @onclick="HandlePlayNextLevel">
+                    <i class="bi bi-play-fill"></i> Next Challenge
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .mm-container {
+        width: 100%;
+        max-width: 500px;
+        margin: 0 auto;
+        padding: 20px;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    /* Selection Screen */
+    .mm-selection {
+        text-align: center;
+    }
+
+    .mm-header {
+        margin-bottom: 30px;
+    }
+
+    .mm-header h1 {
+        font-size: 2rem;
+        color: #667eea;
+        margin: 0 0 10px 0;
+    }
+
+    .mm-header p {
+        color: #666;
+        font-size: 1rem;
+        margin: 0;
+    }
+
+    .mm-levels {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 15px;
+        margin-bottom: 25px;
+    }
+
+    .mm-level-btn {
+        padding: 20px 15px;
+        border: 2px solid #ddd;
+        border-radius: 12px;
+        background: white;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 0.9rem;
+    }
+
+    .mm-level-btn i {
+        font-size: 1.8rem;
+        display: block;
+        margin-bottom: 8px;
+    }
+
+    .mm-level-btn strong {
+        display: block;
+        margin: 8px 0 4px 0;
+    }
+
+    .mm-level-btn small {
+        display: block;
+        color: #999;
+        font-size: 0.8rem;
+    }
+
+    .mm-level-btn:hover {
+        border-color: #667eea;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+    }
+
+    .mm-level-btn.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: #667eea;
+    }
+
+    .mm-start-btn {
+        width: 100%;
+        padding: 15px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 1rem;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .mm-start-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+    }
+
+    .mm-start-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* Game Board */
+    .mm-game {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .mm-info {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        background: white;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .mm-stat {
+        text-align: center;
+    }
+
+    .mm-label {
+        display: block;
+        font-size: 0.8rem;
+        color: #999;
+        margin-bottom: 5px;
+    }
+
+    .mm-value {
+        display: block;
+        font-size: 1.4rem;
+        font-weight: bold;
+        color: #667eea;
+    }
+
+    .mm-value small {
+        font-size: 0.7rem;
+        margin-left: 3px;
+    }
+
+    .mm-board {
+        display: grid;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .mm-card {
+        aspect-ratio: 1;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-size: 1.8rem;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .mm-card:hover:not(:disabled) {
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .mm-card:disabled {
+        cursor: not-allowed;
+    }
+
+    .mm-card.matched {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        border-color: #28a745;
+    }
+
+    /* Analyzing Screen */
+    .mm-analyzing {
+        text-align: center;
+        padding: 60px 20px;
+    }
+
+    .mm-spinner {
+        width: 50px;
+        height: 50px;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 30px;
+    }
+
+    @@keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .mm-analyzing h3 {
+        color: #667eea;
+        margin-bottom: 10px;
+    }
+
+    .mm-analyzing p {
+        color: #999;
+    }
+
+    /* Results Screen */
+    .mm-results {
+        animation: slideUp 0.4s ease;
+    }
+
+    @@keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .mm-results-header {
+        text-align: center;
+        margin-bottom: 25px;
+    }
+
+    .mm-results-header h2 {
+        color: #667eea;
+        font-size: 1.8rem;
+        margin: 0;
+    }
+
+    .mm-score-display {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 30px;
+    }
+
+    .mm-score-circle {
+        width: 140px;
+        height: 140px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+    }
+
+    .mm-score-value {
+        font-size: 2.5rem;
+        font-weight: bold;
+    }
+
+    .mm-score-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+
+    .mm-stats-summary {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-bottom: 25px;
+    }
+
+    .mm-stat-card {
+        background: white;
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .mm-stat-card i {
+        font-size: 1.5rem;
+        color: #667eea;
+    }
+
+    .mm-stat-title {
+        font-size: 0.75rem;
+        color: #999;
+        text-transform: uppercase;
+    }
+
+    .mm-stat-detail {
+        font-size: 1.1rem;
+        font-weight: bold;
+        color: #333;
+    }
+
+    .mm-ai-feedback {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 25px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .mm-feedback-section {
+        margin-bottom: 18px;
+    }
+
+    .mm-feedback-section:last-child {
+        margin-bottom: 0;
+    }
+
+    .mm-feedback-section h3 {
+        color: #667eea;
+        font-size: 1rem;
+        margin: 0 0 8px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .mm-feedback-section p {
+        color: #555;
+        margin: 0;
+        line-height: 1.5;
+        font-size: 0.95rem;
+    }
+
+    .mm-next-level {
+        background: #f0f8ff;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid #28a745;
+    }
+
+    .mm-confidence {
+        font-size: 0.85rem;
+        color: #666;
+        margin-top: 8px;
+    }
+
+    .mm-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    .mm-btn {
+        padding: 15px;
+        border: none;
+        border-radius: 8px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .mm-btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .mm-btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+    }
+
+    .mm-btn-secondary {
+        background: white;
+        color: #667eea;
+        border: 2px solid #667eea;
+    }
+
+    .mm-btn-secondary:hover {
+        background: #f5f5ff;
+    }
+</style>
+
+@code {
+    private class CardData
+    {
+        public int Id { get; set; }
+        public string Symbol { get; set; } = "";
+        public bool IsFlipped { get; set; }
+        public bool IsMatched { get; set; }
+    }
+
+    private int selectedLevel = 0;
+    private bool gameStarted = false;
+    private bool gameEnded = false;
+    private bool aiAnalyzing = false;
+    private int moves = 0;
+    private int gridCols = 4;
+    private int totalPairs = 0;
+    private bool isProcessing = false;
+    private DateTime gameStartTime;
+    private int elapsedSeconds = 0;
+    private System.Threading.Timer? timerHandle;
+
+    private List<CardData> cardList = new();
+    private int? firstCard = null;
+    private int? secondCard = null;
+    private GameSessionResult? _gameSessionResult;
+    private GameAiAnalysisService.AiAnalysisResponse? _aiResponse;
+    private int matchedPairs = 0;  // ← TRACK ACTUAL MATCHED PAIRS
+
+    // Current user context (TODO: Get from authentication)
+    private int currentUserId = 1;
+    private int currentProfileId = 1;
+
+    private string[] symbols = new[] { "🍎", "🍊", "🍋", "🍌", "🍉", "🍓", "🍒", "🍑", "🥝", "🍍", "🥭", "🍐", "🥑", "🍅", "🌽", "🥕" };
+
+    protected override void OnInitialized()
+    {
+        Logger.LogInformation("MemoryMatch component initialized");
+    }
+
+    private void HandleSelectLevel(int level)
+    {
+        selectedLevel = level;
+        Logger?.LogInformation($"Level selected: {level}");
+        StateHasChanged();
+    }
+
+    private void HandleStartGame()
+    {
+        if (selectedLevel == 0)
+        {
+            Logger?.LogWarning("Attempted to start game without selecting a level");
+            return;
+        }
+
+        gameStarted = true;
+        gameEnded = false;
+        aiAnalyzing = false;
+        moves = 0;
+        matchedPairs = 0;  // ← RESET MATCHED PAIRS
+        firstCard = null;
+        secondCard = null;
+        cardList.Clear();
+        elapsedSeconds = 0;
+        gameStartTime = DateTime.Now;
+
+        int pairCount = selectedLevel switch
+        {
+            1 => 8,
+            2 => 10,
+            3 => 12,
+            _ => 8
+        };
+
+        totalPairs = pairCount;
+
+        gridCols = selectedLevel switch
+        {
+            1 => 4,
+            2 => 5,
+            3 => 6,
+            _ => 4
+        };
+
+        var selectedSymbols = symbols.Take(pairCount).ToList();
+        var allSymbols = new List<string>(selectedSymbols);
+        allSymbols.AddRange(selectedSymbols);
+
+        var random = new Random();
+        for (int i = allSymbols.Count - 1; i > 0; i--)
+        {
+            int j = random.Next(i + 1);
+            (allSymbols[i], allSymbols[j]) = (allSymbols[j], allSymbols[i]);
+        }
+
+        for (int i = 0; i < allSymbols.Count; i++)
+        {
+            cardList.Add(new CardData
+            {
+                Id = i,
+                Symbol = allSymbols[i],
+                IsFlipped = false,
+                IsMatched = false
+            });
+        }
+
+        // Start timer
+        timerHandle = new System.Threading.Timer(_ =>
+        {
+            elapsedSeconds++;
+            InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+
+        StateHasChanged();
+    }
+
+    private async Task HandleFlipCard(int id)
+    {
+        if (isProcessing || cardList[id].IsMatched || cardList[id].IsFlipped) return;
+
+        cardList[id].IsFlipped = true;
+        StateHasChanged();
+
+        if (firstCard == null)
+        {
+            firstCard = id;
+        }
+        else if (secondCard == null)
+        {
+            secondCard = id;
+            isProcessing = true;
+            moves++;
+
+            await Task.Delay(700);
+
+            if (cardList[(int)firstCard].Symbol == cardList[(int)secondCard].Symbol)
+            {
+                cardList[(int)firstCard].IsMatched = true;
+                cardList[(int)secondCard].IsMatched = true;
+                matchedPairs++;  // ← INCREMENT MATCHED PAIRS
+
+                if (cardList.All(c => c.IsMatched))
+                {
+                    gameEnded = true;
+                    timerHandle?.Dispose();
+
+                    // Calculate statistics - use actual matched pairs count
+                    _gameSessionResult = StatsService.CalculateStatistics(
+                        "Memory Match",
+                        selectedLevel,
+                        moves,
+                        matchedPairs,  // ← USE ACTUAL MATCHED PAIRS
+                        matchedPairs,  // ← USE ACTUAL MATCHED PAIRS
+                        moves - matchedPairs,
+                        elapsedSeconds,
+                        gameStartTime,
+                        DateTime.Now
+                    );
+
+                    Logger?.LogInformation($"Game ended. Score: {_gameSessionResult.OverallScore:F1}");
+                    
+                    // Save session to backend
+                    await SaveGameSessionAsync();
+                    
+                    // Analyze with AI
+                    await AnalyzeGameWithAI();
+                }
+            }
+            else
+            {
+                cardList[(int)firstCard].IsFlipped = false;
+                cardList[(int)secondCard].IsFlipped = false;
+            }
+
+            firstCard = null;
+            secondCard = null;
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveGameSessionAsync()
+    {
+        try
+        {
+            var session = new GameSession
+            {
+                UserId = currentUserId,
+                ProfileId = currentProfileId,
+                GameType = "MemoryMatch",
+                Difficulty = selectedLevel,
+                Status = "Completed",
+                TimeStarted = gameStartTime,
+                TimeCompleted = DateTime.UtcNow,
+                TotalSeconds = elapsedSeconds,
+                TotalMoves = moves,
+                CorrectMatches = matchedPairs,
+                Accuracy = (decimal)(moves > 0 ? (matchedPairs * 100.0 / moves) : 0),
+                PerformanceScore = (int)(_gameSessionResult?.OverallScore ?? 0),
+                EfficiencyScore = (decimal)(moves > 0 ? (matchedPairs * 100.0 / moves) : 0),
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                Notes = $"Memory Match - Level {selectedLevel} - {moves} moves in {elapsedSeconds}s"
+            };
+
+            // Save via local repository
+            await SessionRepository.CreateSessionAsync(session);
+            
+            // Also save via HTTP API endpoint for consistency
+            try
+            {
+                var request = new
+                {
+                    UserId = currentUserId,
+                    ProfileId = currentProfileId,
+                    GameType = "MemoryMatch",
+                    Difficulty = selectedLevel,
+                    TotalSeconds = elapsedSeconds,
+                    TotalMoves = moves,
+                    CorrectMatches = matchedPairs,
+                    PerformanceScore = (int)(_gameSessionResult?.OverallScore ?? 0)
+                };
+                
+                await Http.PostAsJsonAsync("/api/game/save-session", request);
+                Logger?.LogInformation($"Game session saved via API: MemoryMatch Level {selectedLevel}");
+            }
+            catch (Exception apiEx)
+            {
+                Logger?.LogWarning($"Failed to save via API (local save succeeded): {apiEx.Message}");
+            }
+            
+            Logger?.LogInformation($"Game session saved: MemoryMatch Level {selectedLevel} - Score: {session.PerformanceScore}");
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"Failed to save game session: {ex.Message}");
+        }
+    }
+
+    private async Task AnalyzeGameWithAI()
+    {
+        aiAnalyzing = true;
+        StateHasChanged();
+
+        try
+        {
+            _aiResponse = await AiService.AnalyzeGamePerformanceAsync(
+                _gameSessionResult ?? new GameSessionResult(),
+                "Player",
+                0
+            );
+
+            Logger?.LogInformation($"AI Analysis complete: Score {_aiResponse?.PerformanceScore}");
+            
+            // 🎮 Autosave game result to database
+            await AutosaveGameResultAsync(_aiResponse);
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"AI Analysis failed: {ex.Message}");
+            // Fallback response
+            _aiResponse = new GameAiAnalysisService.AiAnalysisResponse
+            {
+                Encouragement = "Great job completing the game!",
+                FunMessage = "You did amazing!",
+                EffortNote = "Keep practicing to improve!",
+                PerformanceScore = _gameSessionResult?.OverallScore ?? 50,
+                NextDifficultyLevel = Math.Min(3, selectedLevel + 1),
+                Confidence = 0.7
+            };
+            
+            // Still autosave even with fallback response
+            await AutosaveGameResultAsync(_aiResponse);
+        }
+
+        aiAnalyzing = false;
+        StateHasChanged();
+    }
+
+    private async Task AutosaveGameResultAsync(GameAiAnalysisService.AiAnalysisResponse? aiResponse)
+    {
+        try
+        {
+            // Get user info from localStorage
+            var userId = await GetCurrentUserIdAsync();
+            var username = await GetCurrentUsernameAsync();
+
+            var autosaveRequest = new
+            {
+                UserId = userId,
+                Username = username,
+                GameType = "MemoryMatch",
+                GameMode = "Practice",
+                Difficulty = selectedLevel,
+                DifficultyName = GetDifficultyName(selectedLevel),
+                Score = (int)(aiResponse?.PerformanceScore ?? 0),
+                Accuracy = (decimal)(moves > 0 ? (matchedPairs * 100.0 / moves) : 0),
+                TotalMoves = moves,
+                CorrectMoves = matchedPairs,
+                ErrorCount = moves - matchedPairs,
+                TimeTakenSeconds = elapsedSeconds,
+                MatchedPairs = matchedPairs,
+                TotalPairs = totalPairs,
+                AiEncouragement = aiResponse?.Encouragement ?? "Great job!",
+                AiFunMessage = aiResponse?.FunMessage ?? "Keep playing!",
+                AiEffortNote = aiResponse?.EffortNote ?? "Nice effort!",
+                RecommendedDifficulty = GetDifficultyName((int)(aiResponse?.NextDifficultyLevel ?? selectedLevel)),
+                AiConfidence = aiResponse?.Confidence ?? 0.7,
+                StartTime = gameStartTime,
+                EndTime = DateTime.UtcNow,
+                Notes = $"Memory Match - Level {selectedLevel} - {moves} moves, {matchedPairs}/{totalPairs} pairs in {elapsedSeconds}s"
+            };
+
+            var apiUrl = $"{NavigationManager.BaseUri}api/json-stats/save";
+            var response = await Http.PostAsJsonAsync(apiUrl, autosaveRequest);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                Logger?.LogInformation("✅ Game result autosaved to JSON (MemoryMatch)");
+            }
+            else
+            {
+                Logger?.LogWarning($"⚠️ JSON autosave returned status: {response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"❌ JSON autosave failed: {ex.Message}");
+        }
+    }
+
+    private string GetDifficultyName(int level) => level switch
+    {
+        1 => "Easy",
+        2 => "Medium",
+        3 => "Hard",
+        _ => "Unknown"
+    };
+
+    private async Task<int> GetCurrentUserIdAsync()
+    {
+        try
+        {
+            var userIdStr = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "userId");
+            return int.TryParse(userIdStr, out var id) ? id : 1;
+        }
+        catch { return 1; }
+    }
+
+    private async Task<string> GetCurrentUsernameAsync()
+    {
+        try
+        {
+            var username = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "username");
+            return !string.IsNullOrEmpty(username) ? username : "Guest";
+        }
+        catch { return "Guest"; }
+    }
+
+    private async Task HandleResetGame()
+    {
+        selectedLevel = 0;
+        gameStarted = false;
+        gameEnded = false;
+        aiAnalyzing = false;
+        moves = 0;
+        matchedPairs = 0;  // ← RESET MATCHED PAIRS
+        firstCard = null;
+        secondCard = null;
+        cardList.Clear();
+        elapsedSeconds = 0;
+        timerHandle?.Dispose();
+        _gameSessionResult = null;
+        _aiResponse = null;
+        StateHasChanged();
+    }
+
+    private async Task HandlePlayNextLevel()
+    {
+        if (_aiResponse?.NextDifficultyLevel > 0)
+        {
+            selectedLevel = (int)_aiResponse.NextDifficultyLevel;
+            await HandleResetGame();
+            HandleStartGame();
+        }
+    }
+
+    public void Dispose()
+    {
+        timerHandle?.Dispose();
+    }
+}
+

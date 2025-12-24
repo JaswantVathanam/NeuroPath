@@ -1,0 +1,985 @@
+@page "/activities/word-association"
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject AdaptiveCognitiveRehabilitationPlatform.Services.ActivityAIAnalysisService AIService
+
+<PageTitle>Word Association - NeuroPath</PageTitle>
+
+<div class="activity-container">
+    <div class="activity-header">
+        <button class="back-btn" @onclick="GoBack">
+            <i class="bi bi-arrow-left"></i>
+        </button>
+        <div class="header-info">
+            <h1><i class="bi bi-link-45deg"></i> Word Association</h1>
+            <p>Connect words by meaning to strengthen your semantic memory</p>
+        </div>
+        <div class="score-display">
+            <div class="score-item">
+                <i class="bi bi-star-fill"></i>
+                <span>@score</span>
+            </div>
+            <div class="score-item">
+                <i class="bi bi-link"></i>
+                <span>@chainLength</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="game-area">
+        @if (!gameStarted)
+        {
+            <div class="start-screen">
+                <div class="start-icon">
+                    <i class="bi bi-link-45deg"></i>
+                </div>
+                <h2>Word Association Game</h2>
+                <p>Build word chains by connecting related words!</p>
+                <ul class="rules-list">
+                    <li><i class="bi bi-check-circle"></i> Type a word related to the one shown</li>
+                    <li><i class="bi bi-check-circle"></i> Words can be connected by meaning, category, or rhyme</li>
+                    <li><i class="bi bi-check-circle"></i> Build the longest chain possible</li>
+                    <li><i class="bi bi-check-circle"></i> Each valid word adds to your score</li>
+                </ul>
+                <button class="start-btn" @onclick="StartGame">
+                    <i class="bi bi-play-fill"></i> Start Game
+                </button>
+            </div>
+        }
+        else if (gameOver)
+        {
+            <div class="result-screen">
+                <div class="result-icon">
+                    <i class="bi bi-trophy-fill"></i>
+                </div>
+                <h2>Great Job!</h2>
+                <div class="final-stats">
+                    <div class="final-stat">
+                        <span class="stat-value">@chainLength</span>
+                        <span class="stat-label">Words Chained</span>
+                    </div>
+                    <div class="final-stat">
+                        <span class="stat-value">@score</span>
+                        <span class="stat-label">Points Earned</span>
+                    </div>
+                    <div class="final-stat">
+                        <span class="stat-value">@longestWord</span>
+                        <span class="stat-label">Longest Word</span>
+                    </div>
+                </div>
+
+                @if (isLoadingAIFeedback)
+                {
+                    <div class="ai-analysis-loading">
+                        <div class="ai-spinner"></div>
+                        <p>AI is analyzing your word associations...</p>
+                    </div>
+                }
+                else if (aiAnalysis != null)
+                {
+                    <div class="ai-analysis-card">
+                        <div class="ai-analysis-header">
+                            <i class="bi bi-robot"></i>
+                            <span>AI Performance Analysis</span>
+                        </div>
+                        <div class="ai-analysis-content">
+                            <div class="ai-encouragement">
+                                <i class="bi bi-heart-fill"></i>
+                                <p>@aiAnalysis.Encouragement</p>
+                            </div>
+                            <div class="ai-insights">
+                                <h4><i class="bi bi-lightbulb"></i> Insights</h4>
+                                <p>@aiAnalysis.PatternAnalysis</p>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <div class="word-chain-display">
+                    <h3>Your Word Chain</h3>
+                    <div class="chain-words">
+                        @foreach (var word in wordChain)
+                        {
+                            <span class="chain-word">@word</span>
+                            @if (word != wordChain.Last())
+                            {
+                                <i class="bi bi-arrow-right chain-arrow"></i>
+                            }
+                        }
+                    </div>
+                </div>
+                <div class="result-actions">
+                    <button class="play-again-btn" @onclick="StartGame">
+                        <i class="bi bi-arrow-repeat"></i> Play Again
+                    </button>
+                    <button class="back-to-games-btn" @onclick="GoBack">
+                        <i class="bi bi-grid"></i> All Activities
+                    </button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="play-area">
+                <div class="timer-bar">
+                    <div class="timer-fill" style="width: @timerPercent%"></div>
+                </div>
+
+                <div class="current-word-display">
+                    <span class="word-label">Current Word</span>
+                    <span class="current-word">@currentWord</span>
+                </div>
+
+                <div class="chain-preview">
+                    @foreach (var word in wordChain.TakeLast(5))
+                    {
+                        <span class="preview-word">@word</span>
+                    }
+                </div>
+
+                <div class="input-section">
+                    <input type="text" 
+                           class="word-input @(showError ? "error" : "") @(showSuccess ? "success" : "")"
+                           placeholder="Type a related word..."
+                           @bind="userInput"
+                           @bind:event="oninput"
+                           @onkeydown="HandleKeyDown"
+                           disabled="@isProcessing" />
+                    <button class="submit-btn" @onclick="SubmitWord" disabled="@isProcessing">
+                        <i class="bi bi-arrow-right-circle-fill"></i>
+                    </button>
+                </div>
+
+                @if (!string.IsNullOrEmpty(feedback))
+                {
+                    <div class="feedback @(showError ? "error" : "success")">
+                        <i class="bi @(showError ? "bi-x-circle" : "bi-check-circle")"></i>
+                        @feedback
+                    </div>
+                }
+
+                <div class="hints-section">
+                    <span class="hint-label">Hint categories:</span>
+                    <div class="hint-tags">
+                        <span class="hint-tag">Synonyms</span>
+                        <span class="hint-tag">Rhymes</span>
+                        <span class="hint-tag">Categories</span>
+                        <span class="hint-tag">Opposites</span>
+                    </div>
+                </div>
+
+                <button class="skip-btn" @onclick="SkipWord">
+                    <i class="bi bi-skip-forward"></i> Skip (End Game)
+                </button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private bool gameStarted = false;
+    private bool gameOver = false;
+    private bool isProcessing = false;
+    private bool showError = false;
+    private bool showSuccess = false;
+    private string currentWord = "";
+    private string userInput = "";
+    private string feedback = "";
+    private int score = 0;
+    private int chainLength = 0;
+    private double timerPercent = 100;
+    private string longestWord = "";
+    private List<string> wordChain = new();
+    private System.Timers.Timer? gameTimer;
+    
+    // User info from localStorage
+    private int userId = 0;
+    private string username = "";
+
+    // AI Integration
+    private bool isLoadingAIFeedback = false;
+    private ActivityAIResult? aiAnalysis;
+
+    private class ActivityAIResult
+    {
+        public string Encouragement { get; set; } = "";
+        public string PatternAnalysis { get; set; } = "";
+    }
+
+    private List<string> startingWords = new()
+    {
+        "Ocean", "Mountain", "Garden", "Music", "Travel", "Family",
+        "Science", "Nature", "Dream", "Adventure", "Light", "Peace",
+        "Journey", "Wisdom", "Heart", "Star", "River", "Forest"
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var userIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+                var usernameStr = await JS.InvokeAsync<string>("localStorage.getItem", "username");
+                
+                if (!string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out var parsedId))
+                {
+                    userId = parsedId;
+                }
+                username = usernameStr ?? "";
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading user info: {ex.Message}");
+            }
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        // Initialization
+    }
+
+    private void StartGame()
+    {
+        gameStarted = true;
+        gameOver = false;
+        score = 0;
+        chainLength = 0;
+        wordChain.Clear();
+        userInput = "";
+        feedback = "";
+        timerPercent = 100;
+        longestWord = "";
+        aiAnalysis = null;
+
+        var random = new Random();
+        currentWord = startingWords[random.Next(startingWords.Count)];
+        wordChain.Add(currentWord);
+        chainLength = 1;
+
+        StartTimer();
+    }
+
+    private void StartTimer()
+    {
+        gameTimer?.Stop();
+        gameTimer?.Dispose();
+        timerPercent = 100;
+
+        gameTimer = new System.Timers.Timer(100);
+        gameTimer.Elapsed += async (s, e) =>
+        {
+            timerPercent -= 0.5;
+            if (timerPercent <= 0)
+            {
+                gameTimer?.Stop();
+                await InvokeAsync(() =>
+                {
+                    EndGame();
+                    StateHasChanged();
+                });
+            }
+            else
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        };
+        gameTimer.Start();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SubmitWord();
+        }
+    }
+
+    private async Task SubmitWord()
+    {
+        if (string.IsNullOrWhiteSpace(userInput) || isProcessing) return;
+
+        isProcessing = true;
+        showError = false;
+        showSuccess = false;
+
+        var word = userInput.Trim();
+
+        // Check if word was already used
+        if (wordChain.Any(w => w.Equals(word, StringComparison.OrdinalIgnoreCase)))
+        {
+            feedback = "This word was already used!";
+            showError = true;
+            isProcessing = false;
+            StateHasChanged();
+            await Task.Delay(1500);
+            feedback = "";
+            showError = false;
+            StateHasChanged();
+            return;
+        }
+
+        // Check word length
+        if (word.Length < 2)
+        {
+            feedback = "Word must be at least 2 letters!";
+            showError = true;
+            isProcessing = false;
+            StateHasChanged();
+            await Task.Delay(1500);
+            feedback = "";
+            showError = false;
+            StateHasChanged();
+            return;
+        }
+
+        // Accept the word (in a real app, you'd validate association)
+        wordChain.Add(word);
+        currentWord = word;
+        chainLength++;
+        score += word.Length * 10;
+
+        if (word.Length > longestWord.Length)
+        {
+            longestWord = word;
+        }
+
+        feedback = $"+{word.Length * 10} points!";
+        showSuccess = true;
+        userInput = "";
+        timerPercent = Math.Min(100, timerPercent + 20); // Add time for correct answer
+
+        StateHasChanged();
+        await Task.Delay(800);
+        feedback = "";
+        showSuccess = false;
+        isProcessing = false;
+        StateHasChanged();
+    }
+
+    private async Task SkipWord()
+    {
+        await EndGame();
+    }
+
+    private async Task EndGame()
+    {
+        gameTimer?.Stop();
+        gameTimer?.Dispose();
+        gameOver = true;
+        _ = Task.Run(async () => await LoadAIFeedback());
+        await SaveActivitySession();
+    }
+
+    private async Task LoadAIFeedback()
+    {
+        isLoadingAIFeedback = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var session = new AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession
+            {
+                UserId = 1,
+                ActivityType = "WordAssociation",
+                StartTime = DateTime.UtcNow.AddMinutes(-5),
+                EndTime = DateTime.UtcNow,
+                DurationSeconds = 5 * 60,
+                Score = score,
+                Accuracy = chainLength > 0 ? (decimal)((double)score / (chainLength * 10) * 100) : 0,
+                Difficulty = "medium",
+                ActivityData = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    chainLength = chainLength,
+                    longestWord = longestWord,
+                    wordChain = wordChain
+                })
+            };
+
+            var analysis = await AIService.AnalyzeActivityPerformanceAsync(session, new List<AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession>());
+            if (analysis != null)
+            {
+                aiAnalysis = new ActivityAIResult
+                {
+                    Encouragement = analysis.Encouragement,
+                    PatternAnalysis = analysis.PatternAnalysis
+                };
+            }
+        }
+        catch
+        {
+            aiAnalysis = new ActivityAIResult
+            {
+                Encouragement = chainLength >= 5 ? "Excellent word chain! Your vocabulary and association skills are impressive!" : "Good effort! Keep building those word connections!",
+                PatternAnalysis = $"You created a chain of {chainLength} words with your longest word being \"{longestWord}\"."
+            };
+        }
+        finally
+        {
+            isLoadingAIFeedback = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task SaveActivitySession()
+    {
+        try
+        {
+            var activityData = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                chainLength = chainLength,
+                longestWord = longestWord,
+                wordsUsed = wordChain.Count,
+                averageWordLength = wordChain.Count > 0 ? wordChain.Average(w => w.Length) : 0
+            });
+
+            var session = new
+            {
+                userId = userId,
+                username = username,
+                activityType = "WordAssociation",
+                activityName = "Word Association",
+                durationSeconds = 300,
+                score = score,
+                accuracy = chainLength > 0 ? (decimal)((double)score / (chainLength * 10) * 100) : 0m,
+                completionPercentage = 100,
+                difficulty = "medium",
+                activityData = activityData,
+                moodBefore = "",
+                moodAfter = ""
+            };
+
+            var apiUrl = $"{Navigation.BaseUri}api/activities/save";
+            await Http.PostAsJsonAsync(apiUrl, session);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to save activity session: {ex.Message}");
+        }
+    }
+
+    private void GoBack()
+    {
+        gameTimer?.Stop();
+        gameTimer?.Dispose();
+        Navigation.NavigateTo("/games");
+    }
+
+    public void Dispose()
+    {
+        gameTimer?.Stop();
+        gameTimer?.Dispose();
+    }
+}
+
+<style>
+    .activity-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%);
+    }
+
+    .activity-header {
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        color: white;
+        padding: 1.5rem 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .back-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        border: 2px solid rgba(255,255,255,0.3);
+        background: rgba(255,255,255,0.1);
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        transition: all 200ms;
+    }
+
+    .back-btn:hover {
+        background: rgba(255,255,255,0.2);
+    }
+
+    .header-info {
+        flex-grow: 1;
+    }
+
+    .header-info h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .header-info p {
+        margin: 0.25rem 0 0;
+        opacity: 0.9;
+        font-size: 0.9rem;
+    }
+
+    .score-display {
+        display: flex;
+        gap: 1.5rem;
+    }
+
+    .score-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: rgba(255,255,255,0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 1.25rem;
+    }
+
+    .game-area {
+        max-width: 700px;
+        margin: 2rem auto;
+        padding: 0 1.5rem;
+    }
+
+    .start-screen, .result-screen {
+        background: white;
+        border-radius: 24px;
+        padding: 3rem;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+
+    .start-icon, .result-icon {
+        width: 100px;
+        height: 100px;
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 3rem;
+        color: white;
+    }
+
+    .result-icon {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+
+    .start-screen h2, .result-screen h2 {
+        margin: 0 0 1rem;
+        font-size: 2rem;
+        color: #1f2937;
+    }
+
+    .start-screen p {
+        color: #6b7280;
+        margin-bottom: 2rem;
+    }
+
+    .rules-list {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 2rem;
+        text-align: left;
+        max-width: 400px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .rules-list li {
+        padding: 0.75rem 0;
+        color: #4b5563;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .rules-list li i {
+        color: #10b981;
+    }
+
+    .start-btn {
+        padding: 1rem 3rem;
+        font-size: 1.25rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        color: white;
+        border: none;
+        border-radius: 16px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        transition: all 300ms;
+    }
+
+    .start-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 30px rgba(236, 72, 153, 0.4);
+    }
+
+    .play-area {
+        background: white;
+        border-radius: 24px;
+        padding: 2rem;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+
+    .timer-bar {
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 2rem;
+    }
+
+    .timer-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #ec4899, #db2777);
+        transition: width 100ms linear;
+    }
+
+    .current-word-display {
+        text-align: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .word-label {
+        display: block;
+        font-size: 0.875rem;
+        color: #9ca3af;
+        margin-bottom: 0.5rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .current-word {
+        font-size: 3rem;
+        font-weight: 800;
+        color: #ec4899;
+    }
+
+    .chain-preview {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 1.5rem;
+    }
+
+    .preview-word {
+        background: #fce7f3;
+        color: #be185d;
+        padding: 0.375rem 0.75rem;
+        border-radius: 6px;
+        font-size: 0.875rem;
+    }
+
+    .input-section {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .word-input {
+        flex-grow: 1;
+        padding: 1rem 1.5rem;
+        font-size: 1.25rem;
+        border: 3px solid #e5e7eb;
+        border-radius: 16px;
+        font-family: inherit;
+        transition: all 200ms;
+    }
+
+    .word-input:focus {
+        outline: none;
+        border-color: #ec4899;
+    }
+
+    .word-input.error {
+        border-color: #ef4444;
+        background: #fef2f2;
+    }
+
+    .word-input.success {
+        border-color: #10b981;
+        background: #ecfdf5;
+    }
+
+    .submit-btn {
+        width: 60px;
+        height: 60px;
+        border-radius: 16px;
+        border: none;
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        color: white;
+        font-size: 1.5rem;
+        cursor: pointer;
+        transition: all 200ms;
+    }
+
+    .submit-btn:hover:not(:disabled) {
+        transform: scale(1.05);
+    }
+
+    .submit-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .feedback {
+        text-align: center;
+        padding: 0.75rem;
+        border-radius: 10px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .feedback.error {
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+    .feedback.success {
+        background: #ecfdf5;
+        color: #059669;
+    }
+
+    .hints-section {
+        text-align: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .hint-label {
+        font-size: 0.875rem;
+        color: #9ca3af;
+    }
+
+    .hint-tags {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .hint-tag {
+        background: #f3f4f6;
+        color: #6b7280;
+        padding: 0.375rem 0.75rem;
+        border-radius: 6px;
+        font-size: 0.75rem;
+    }
+
+    .skip-btn {
+        width: 100%;
+        padding: 0.875rem;
+        background: transparent;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        color: #6b7280;
+        font-family: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .skip-btn:hover {
+        border-color: #9ca3af;
+        color: #374151;
+    }
+
+    .final-stats {
+        display: flex;
+        justify-content: center;
+        gap: 2rem;
+        margin: 2rem 0;
+    }
+
+    .final-stat {
+        text-align: center;
+    }
+
+    .final-stat .stat-value {
+        display: block;
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: #ec4899;
+    }
+
+    .final-stat .stat-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .word-chain-display {
+        background: #fdf2f8;
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin: 2rem 0;
+    }
+
+    .word-chain-display h3 {
+        margin: 0 0 1rem;
+        color: #be185d;
+    }
+
+    .chain-words {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .chain-word {
+        background: white;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    .chain-arrow {
+        color: #ec4899;
+    }
+
+    .result-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+    }
+
+    .play-again-btn, .back-to-games-btn {
+        padding: 1rem 2rem;
+        border-radius: 12px;
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .play-again-btn {
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        color: white;
+        border: none;
+    }
+
+    .play-again-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(236, 72, 153, 0.3);
+    }
+
+    .back-to-games-btn {
+        background: white;
+        border: 2px solid #e5e7eb;
+        color: #6b7280;
+    }
+
+    .back-to-games-btn:hover {
+        border-color: #9ca3af;
+    }
+
+    /* AI Integration Styles */
+    .ai-analysis-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.5rem;
+        color: #6b7280;
+    }
+
+    .ai-spinner {
+        width: 36px;
+        height: 36px;
+        border: 3px solid #fce7f3;
+        border-top-color: #ec4899;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .ai-analysis-card {
+        background: linear-gradient(135deg, #fdf4ff 0%, #fae8ff 100%);
+        border: 2px solid #ec4899;
+        border-radius: 16px;
+        margin: 1.5rem 0;
+        overflow: hidden;
+    }
+
+    .ai-analysis-header {
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        color: white;
+        padding: 0.75rem 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+    }
+
+    .ai-analysis-content {
+        padding: 1.25rem;
+    }
+
+    .ai-encouragement {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #f9a8d4;
+    }
+
+    .ai-encouragement i {
+        color: #ef4444;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+    }
+
+    .ai-encouragement p {
+        margin: 0;
+        color: #9d174d;
+        font-size: 0.95rem;
+        line-height: 1.5;
+    }
+
+    .ai-insights h4 {
+        margin: 0 0 0.5rem;
+        color: #9d174d;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.9rem;
+    }
+
+    .ai-insights p {
+        margin: 0;
+        color: #be185d;
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+</style>

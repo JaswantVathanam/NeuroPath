@@ -1,0 +1,695 @@
+@page "/settings"
+@rendermode InteractiveServer
+
+<PageTitle>Settings - NeuroPath</PageTitle>
+
+<div class="settings-container">
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="hero-gradient"></div>
+        <div class="hero-content">
+            <h1><i class="bi bi-gear"></i> Settings</h1>
+            <p>Customize your NeuroPath experience</p>
+        </div>
+    </section>
+
+    <!-- Settings Grid -->
+    <div class="settings-grid">
+        <!-- User Profile -->
+        <section class="settings-card profile-card" style="--delay: 0s;">
+            <div class="card-header">
+                <i class="bi bi-person-circle"></i> User Profile
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label>Full Name</label>
+                    <input type="text" class="form-control" placeholder="Enter your full name" value="John Doe">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" class="form-control" placeholder="your.email@example.com" value="john@example.com">
+                </div>
+                <div class="form-group">
+                    <label>Age Group</label>
+                    <select class="form-control">
+                        <option>Select age group</option>
+                        <option selected>50-60</option>
+                        <option>60-70</option>
+                        <option>70-80</option>
+                        <option>80+</option>
+                    </select>
+                </div>
+                <button class="btn-save"><i class="bi bi-check-circle"></i> Save Profile</button>
+            </div>
+        </section>
+
+        <!-- Accessibility -->
+        <section class="settings-card accessibility-card" style="--delay: 0.1s;">
+            <div class="card-header">
+                <i class="bi bi-universal-access"></i> Accessibility
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label>Text Size</label>
+                    <select class="form-control">
+                        <option>Normal</option>
+                        <option selected>Large</option>
+                        <option>Extra Large</option>
+                    </select>
+                </div>
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox" checked> 
+                        <span><i class="bi bi-sun"></i> High Contrast Mode</span>
+                    </label>
+                </div>
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox"> 
+                        <span><i class="bi bi-play"></i> Reduce Animations</span>
+                    </label>
+                </div>
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox"> 
+                        <span><i class="bi bi-ear"></i> Screen Reader Optimized</span>
+                    </label>
+                </div>
+                <button class="btn-save"><i class="bi bi-check-circle"></i> Save Preferences</button>
+            </div>
+        </section>
+
+        <!-- Sound & Music -->
+        <section class="settings-card sound-card" style="--delay: 0.2s;">
+            <div class="card-header">
+                <i class="bi bi-volume-up"></i> Sound & Music
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label>Background Music</label>
+                    <select class="form-control">
+                        <option>Calming</option>
+                        <option selected>Gentle</option>
+                        <option>Silent</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Game Sound Effects</label>
+                    <select class="form-control">
+                        <option selected>Enabled</option>
+                        <option>Disabled</option>
+                        <option>Subtle</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Master Volume: <span class="volume-value">75%</span></label>
+                    <input type="range" min="0" max="100" value="75" class="slider">
+                </div>
+                <button class="btn-save"><i class="bi bi-check-circle"></i> Save Audio Settings</button>
+            </div>
+        </section>
+
+        <!-- Notifications -->
+        <section class="settings-card notification-card" style="--delay: 0.3s;">
+            <div class="card-header">
+                <i class="bi bi-bell"></i> Notifications
+            </div>
+            <div class="card-body">
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox" checked> 
+                        <span><i class="bi bi-clock"></i> Daily Reminders</span>
+                    </label>
+                </div>
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox" checked> 
+                        <span><i class="bi bi-trophy"></i> Achievement Notifications</span>
+                    </label>
+                </div>
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox"> 
+                        <span><i class="bi bi-graph-up"></i> Weekly Progress Report</span>
+                    </label>
+                </div>
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox"> 
+                        <span><i class="bi bi-lightbulb"></i> Tips & Suggestions</span>
+                    </label>
+                </div>
+                <button class="btn-save"><i class="bi bi-check-circle"></i> Save Notification Preferences</button>
+            </div>
+        </section>
+
+        <!-- Language -->
+        <section class="settings-card language-card" style="--delay: 0.4s;">
+            <div class="card-header">
+                <i class="bi bi-globe"></i> Language
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label>Display Language</label>
+                    <select class="form-control">
+                        <option selected>English</option>
+                        <option>Español</option>
+                        <option>Français</option>
+                        <option>Deutsch</option>
+                        <option>中文</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Date Format</label>
+                    <select class="form-control">
+                        <option selected>MM/DD/YYYY</option>
+                        <option>DD/MM/YYYY</option>
+                        <option>YYYY-MM-DD</option>
+                    </select>
+                </div>
+                <button class="btn-save"><i class="bi bi-check-circle"></i> Save Language Settings</button>
+            </div>
+        </section>
+
+        <!-- Privacy & Security -->
+        <section class="settings-card security-card" style="--delay: 0.5s;">
+            <div class="card-header">
+                <i class="bi bi-shield-lock"></i> Privacy & Security
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label>Change Password</label>
+                    <input type="password" class="form-control mb-2" placeholder="Current password">
+                    <input type="password" class="form-control mb-2" placeholder="New password">
+                    <input type="password" class="form-control" placeholder="Confirm password">
+                </div>
+                <div class="checkbox-group">
+                    <label>
+                        <input type="checkbox"> 
+                        <span><i class="bi bi-share"></i> Share Anonymous Progress Data</span>
+                    </label>
+                </div>
+                <button class="btn-save"><i class="bi bi-lock"></i> Update Password</button>
+            </div>
+        </section>
+    </div>
+
+    <!-- Danger Zone -->
+    <section class="danger-zone">
+        <div class="danger-header">
+            <i class="bi bi-exclamation-triangle"></i> Danger Zone
+        </div>
+        <div class="danger-content">
+            <div class="danger-item">
+                <div class="danger-info">
+                    <strong><i class="bi bi-trash"></i> Clear All Game Data</strong>
+                    <p>This will clear all your game history and progress. This action cannot be undone.</p>
+                </div>
+                <button class="btn-danger"><i class="bi bi-trash"></i> Clear Data</button>
+            </div>
+            <div class="danger-item">
+                <div class="danger-info">
+                    <strong><i class="bi bi-person-x"></i> Delete Account</strong>
+                    <p>Permanently delete your account and all associated data.</p>
+                </div>
+                <button class="btn-danger"><i class="bi bi-person-x"></i> Delete Account</button>
+            </div>
+        </div>
+    </section>
+</div>
+
+<style>
+:root {
+    --primary-color: #6366f1;
+    --secondary-color: #06b6d4;
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --bg-white: #ffffff;
+    --bg-light: #f9fafb;
+    --text-dark: #1f2937;
+    --text-muted: #6b7280;
+    --border-color: #e5e7eb;
+    --border-radius-md: 12px;
+    --spacing-xs: 0.5rem;
+    --spacing-sm: 1rem;
+    --spacing-md: 1.5rem;
+    --spacing-lg: 2rem;
+    --transition-fast: 0.3s ease;
+}
+
+.settings-container {
+    animation: fadeIn 0.6s ease-in-out;
+}
+
+/* Hero Section */
+.hero-section {
+    position: relative;
+    background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #f472b6 100%);
+    border-radius: var(--border-radius-md);
+    padding: 3rem 2rem;
+    margin-bottom: 3rem;
+    overflow: hidden;
+}
+
+.hero-gradient {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(45deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+    pointer-events: none;
+}
+
+.hero-content {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    color: white;
+}
+
+.hero-content h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    animation: slideUp 0.6s ease-out;
+}
+
+.hero-content p {
+    font-size: 1.1rem;
+    opacity: 0.9;
+    animation: slideUp 0.6s ease-out 0.1s backwards;
+}
+
+/* Settings Grid */
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--spacing-md);
+    margin-bottom: 3rem;
+}
+
+.settings-card {
+    background: var(--bg-white);
+    border-radius: var(--border-radius-md);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    animation: slideUp 0.6s ease-out backwards;
+    animation-delay: var(--delay, 0s);
+    transition: all var(--transition-fast);
+    border: 2px solid transparent;
+}
+
+.settings-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+}
+
+.card-header {
+    padding: 1.25rem;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.profile-card .card-header {
+    background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+}
+
+.accessibility-card .card-header {
+    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+}
+
+.sound-card .card-header {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.notification-card .card-header {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.language-card .card-header {
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+}
+
+.security-card .card-header {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.card-header i {
+    font-size: 1.3rem;
+}
+
+.card-body {
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+/* Form Controls */
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.form-group label {
+    font-weight: 600;
+    color: var(--text-dark);
+    font-size: 0.95rem;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 1rem;
+    color: var(--text-dark);
+    transition: all var(--transition-fast);
+    background: var(--bg-light);
+}
+
+.form-control:focus {
+    border-color: var(--primary-color);
+    background: var(--bg-white);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    outline: none;
+}
+
+.form-control::placeholder {
+    color: var(--text-muted);
+}
+
+/* Checkboxes */
+.checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.checkbox-group label {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-weight: 500;
+    color: var(--text-dark);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+}
+
+.checkbox-group label:hover {
+    background: var(--bg-light);
+}
+
+.checkbox-group input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    accent-color: var(--primary-color);
+}
+
+.checkbox-group span {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.checkbox-group i {
+    font-size: 1.1rem;
+    color: var(--primary-color);
+}
+
+/* Slider */
+.slider {
+    width: 100%;
+    height: 8px;
+    border-radius: 5px;
+    background: var(--border-color);
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.1);
+}
+
+.slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    cursor: pointer;
+    border: none;
+    transition: all var(--transition-fast);
+}
+
+.slider::-moz-range-thumb:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.1);
+}
+
+.volume-value {
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+/* Buttons */
+.btn-save {
+    background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    width: 100%;
+}
+
+.btn-save:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+}
+
+.btn-save:active {
+    transform: translateY(0);
+}
+
+/* Danger Zone */
+.danger-zone {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(239, 68, 68, 0.04) 100%);
+    border: 2px solid rgba(239, 68, 68, 0.3);
+    border-radius: var(--border-radius-md);
+    overflow: hidden;
+    animation: slideUp 0.6s ease-out 0.6s backwards;
+}
+
+.danger-header {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+    padding: 1.25rem var(--spacing-lg);
+    font-weight: 700;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.danger-header i {
+    font-size: 1.3rem;
+}
+
+.danger-content {
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+}
+
+.danger-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    padding: 1.25rem;
+    background: var(--bg-white);
+    border-radius: 8px;
+    transition: all var(--transition-fast);
+}
+
+.danger-item:hover {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.04) 0%, rgba(239, 68, 68, 0.02) 100%);
+}
+
+.danger-info {
+    flex: 1;
+}
+
+.danger-info strong {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--danger-color);
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.danger-info strong i {
+    font-size: 1.1rem;
+}
+
+.danger-info p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin: 0;
+    line-height: 1.5;
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+    border: none;
+    padding: 0.6rem 1.25rem;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.btn-danger:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);
+}
+
+.btn-danger:active {
+    transform: translateY(0);
+}
+
+/* Spacing Utilities */
+.mb-2 {
+    margin-bottom: var(--spacing-sm);
+}
+
+/* Animations */
+@@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive Design */
+@@media (max-width: 768px) {
+    .hero-content h1 {
+        font-size: 2rem;
+    }
+
+    .hero-content p {
+        font-size: 1rem;
+    }
+
+    .hero-section {
+        padding: 2rem 1.5rem;
+    }
+
+    .settings-grid {
+        grid-template-columns: 1fr;
+        gap: var(--spacing-md);
+    }
+
+    .danger-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .btn-danger {
+        width: 100%;
+    }
+
+    .card-body {
+        padding: var(--spacing-md);
+    }
+}
+
+@@media (max-width: 480px) {
+    .hero-content h1 {
+        font-size: 1.5rem;
+    }
+
+    .hero-section {
+        padding: 1.5rem 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .settings-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .card-body {
+        padding: var(--spacing-md) 1rem;
+    }
+
+    .form-control {
+        font-size: 16px;
+    }
+
+    .checkbox-group label {
+        gap: 0.5rem;
+    }
+
+    .danger-item {
+        padding: 1rem;
+    }
+
+    .danger-info strong {
+        font-size: 0.9rem;
+    }
+}
+</style>

@@ -1,0 +1,54 @@
+{
+  "users": [
+    {
+      "userId": 101,
+      "username": "jaswant.b",
+      "fullName": "Jaswant B",
+      "email": "jaswant.b@corehab.demo",
+      "password": "Jasw@nt2024",
+      "userType": "User",
+      "isActive": true,
+      "createdAt": "2024-01-15T10:00:00Z"
+    },
+    {
+      "userId": 102,
+      "username": "rishika.p",
+      "fullName": "Rishika P",
+      "email": "rishika.p@corehab.demo",
+      "password": "R1sh!ka2024",
+      "userType": "User",
+      "isActive": true,
+      "createdAt": "2024-01-15T10:00:00Z"
+    },
+    {
+      "userId": 103,
+      "username": "bhuvanan.p",
+      "fullName": "Bhuvanan P",
+      "email": "bhuvanan.p@corehab.demo",
+      "password": "Bhuv@n2024",
+      "userType": "User",
+      "isActive": true,
+      "createdAt": "2024-01-15T10:00:00Z"
+    },
+    {
+      "userId": 104,
+      "username": "mariyam.sa",
+      "fullName": "Mariyam S A",
+      "email": "mariyam.sa@corehab.demo",
+      "password": "M@riyam2024",
+      "userType": "User",
+      "isActive": true,
+      "createdAt": "2024-01-15T10:00:00Z"
+    },
+    {
+      "userId": 201,
+      "username": "rajasekaran.m",
+      "fullName": "Rajasekaran M",
+      "email": "rajasekaran.m@corehab.demo",
+      "password": "R@jasek2024",
+      "userType": "Therapist",
+      "isActive": true,
+      "createdAt": "2024-01-15T10:00:00Z"
+    }
+  ]
+}

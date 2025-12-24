@@ -1,0 +1,758 @@
+@page "/support"
+@rendermode InteractiveServer
+
+<PageTitle>Support - NeuroPath</PageTitle>
+
+<div class="support-container">
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="hero-gradient"></div>
+        <div class="hero-content">
+            <h1><i class="bi bi-chat-dots"></i> Support Center</h1>
+            <p>Get help and answers to common questions</p>
+        </div>
+    </section>
+
+    <!-- Contact Form -->
+    <section class="mb-4 contact-section">
+        <div class="contact-card">
+            <div class="section-title">
+                <i class="bi bi-envelope"></i> Contact Us
+            </div>
+            <form class="contact-form" @formname="ContactForm">
+                <div class="form-group">
+                    <label><i class="bi bi-person"></i> Your Name</label>
+                    <input type="text" class="form-control" placeholder="Enter your full name">
+                </div>
+                <div class="form-group">
+                    <label><i class="bi bi-envelope"></i> Email Address</label>
+                    <input type="email" class="form-control" placeholder="your.email@example.com">
+                </div>
+                <div class="form-group">
+                    <label><i class="bi bi-tag"></i> Subject</label>
+                    <select class="form-control">
+                        <option>Select a topic...</option>
+                        <option>Technical Issue</option>
+                        <option>Account Help</option>
+                        <option>Game Feedback</option>
+                        <option>General Question</option>
+                        <option>Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label><i class="bi bi-chat-left-text"></i> Message</label>
+                    <textarea class="form-control" placeholder="Tell us how we can help..." rows="5"></textarea>
+                </div>
+                <button type="submit" class="btn-submit"><i class="bi bi-send"></i> Send Message</button>
+            </form>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="faq-section">
+        <div class="section-header">
+            <h2><i class="bi bi-question-circle"></i> Frequently Asked Questions</h2>
+        </div>
+        
+        <div class="faq-container">
+            <div class="faq-item" onclick="this.classList.toggle('active')" style="--delay: 0s;">
+                <div class="faq-header">
+                    <span class="faq-icon"><i class="bi bi-question-lg"></i></span>
+                    <span class="faq-question">How do the games help with cognitive recovery?</span>
+                    <span class="faq-toggle"><i class="bi bi-chevron-down"></i></span>
+                </div>
+                <div class="faq-body">
+                    <p>Our games are designed based on cognitive rehabilitation principles to help improve memory, focus, reaction time, 
+                    and logical thinking. By practicing regularly, users can strengthen neural pathways and improve cognitive function.</p>
+                </div>
+            </div>
+
+            <div class="faq-item" onclick="this.classList.toggle('active')" style="--delay: 0.1s;">
+                <div class="faq-header">
+                    <span class="faq-icon"><i class="bi bi-smartphone"></i></span>
+                    <span class="faq-question">Can I use NeuroPath on my mobile device?</span>
+                    <span class="faq-toggle"><i class="bi bi-chevron-down"></i></span>
+                </div>
+                <div class="faq-body">
+                    <p>Currently, NeuroPath is optimized for desktop and tablet use. We're working on a mobile app for future release. 
+                    You can access the web version on most modern smartphones through your browser.</p>
+                </div>
+            </div>
+
+            <div class="faq-item" onclick="this.classList.toggle('active')" style="--delay: 0.2s;">
+                <div class="faq-header">
+                    <span class="faq-icon"><i class="bi bi-cpu"></i></span>
+                    <span class="faq-question">How does the AI adapt the game difficulty?</span>
+                    <span class="faq-toggle"><i class="bi bi-chevron-down"></i></span>
+                </div>
+                <div class="faq-body">
+                    <p>Our AI system analyzes your performance metrics including accuracy, speed, and consistency. It automatically 
+                    increases difficulty when you're performing well and reduces it if you're struggling, ensuring you're always 
+                    working at an optimal challenge level.</p>
+                </div>
+            </div>
+
+            <div class="faq-item" onclick="this.classList.toggle('active')" style="--delay: 0.3s;">
+                <div class="faq-header">
+                    <span class="faq-icon"><i class="bi bi-shield-check"></i></span>
+                    <span class="faq-question">Is my data secure and private?</span>
+                    <span class="faq-toggle"><i class="bi bi-chevron-down"></i></span>
+                </div>
+                <div class="faq-body">
+                    <p>Yes! All your data is encrypted and stored securely on Azure servers. We comply with HIPAA and GDPR standards 
+                    to protect your privacy. You can review our privacy policy for more details.</p>
+                </div>
+            </div>
+
+            <div class="faq-item" onclick="this.classList.toggle('active')" style="--delay: 0.4s;">
+                <div class="faq-header">
+                    <span class="faq-icon"><i class="bi bi-graph-up"></i></span>
+                    <span class="faq-question">Can therapists monitor my progress?</span>
+                    <span class="faq-toggle"><i class="bi bi-chevron-down"></i></span>
+                </div>
+                <div class="faq-body">
+                    <p>Yes! If you're enrolled in a therapist-managed program, your therapist can access anonymized progress reports 
+                    and recommendations. You control what data is shared and can modify privacy settings anytime.</p>
+                </div>
+            </div>
+
+            <div class="faq-item" onclick="this.classList.toggle('active')" style="--delay: 0.5s;">
+                <div class="faq-header">
+                    <span class="faq-icon"><i class="bi bi-calendar3"></i></span>
+                    <span class="faq-question">How often should I play the games?</span>
+                    <span class="faq-toggle"><i class="bi bi-chevron-down"></i></span>
+                </div>
+                <div class="faq-body">
+                    <p>We recommend 15-30 minutes of daily practice for optimal results, but consistency matters more than duration. 
+                    Even 10-15 minutes daily can show improvement over time. Listen to your body and take breaks when needed.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Getting Started Tips -->
+    <section class="tips-section">
+        <div class="section-header">
+            <h2><i class="bi bi-lightbulb"></i> Getting Started Tips</h2>
+        </div>
+        <div class="tips-grid">
+            <div class="tip-card" style="--delay: 0s;">
+                <div class="tip-icon profile-icon">
+                    <i class="bi bi-person-check"></i>
+                </div>
+                <h3>Create Your Profile</h3>
+                <p>Start by setting up your profile in Settings to personalize your experience and track your progress.</p>
+            </div>
+            <div class="tip-card" style="--delay: 0.1s;">
+                <div class="tip-icon game-icon">
+                    <i class="bi bi-joystick"></i>
+                </div>
+                <h3>Start with Easy</h3>
+                <p>Begin with easier difficulty levels to get comfortable with the games before increasing the challenge.</p>
+            </div>
+            <div class="tip-card" style="--delay: 0.2s;">
+                <div class="tip-icon progress-icon">
+                    <i class="bi bi-graph-up"></i>
+                </div>
+                <h3>Check Progress</h3>
+                <p>Regularly visit your Progress dashboard to see improvement and stay motivated.</p>
+            </div>
+            <div class="tip-card" style="--delay: 0.3s;">
+                <div class="tip-icon schedule-icon">
+                    <i class="bi bi-clock-history"></i>
+                </div>
+                <h3>Set a Schedule</h3>
+                <p>Playing at the same time each day helps build a healthy routine and maintains consistency.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Additional Resources -->
+    <section class="resources-section">
+        <div class="resources-card">
+            <div class="section-title">
+                <i class="bi bi-book"></i> Additional Resources
+            </div>
+            <div class="resources-grid">
+                <div class="resource-item" style="--delay: 0s;">
+                    <div class="resource-icon guide-icon">
+                        <i class="bi bi-file-text"></i>
+                    </div>
+                    <strong>User Guide</strong>
+                    <p>Comprehensive guide covering all features and how to use them effectively.</p>
+                </div>
+                <div class="resource-item" style="--delay: 0.1s;">
+                    <div class="resource-icon video-icon">
+                        <i class="bi bi-play-circle"></i>
+                    </div>
+                    <strong>Video Tutorials</strong>
+                    <p>Step-by-step videos showing how to play each game and track your progress.</p>
+                </div>
+                <div class="resource-item" style="--delay: 0.2s;">
+                    <div class="resource-icon phone-icon">
+                        <i class="bi bi-telephone"></i>
+                    </div>
+                    <strong>Phone Support</strong>
+                    <p>Call 1-800-COG-REHAB (Monday-Friday, 9 AM - 5 PM EST) for personalized assistance.</p>
+                </div>
+                <div class="resource-item" style="--delay: 0.3s;">
+                    <div class="resource-icon forum-icon">
+                        <i class="bi bi-chat-left-dots"></i>
+                    </div>
+                    <strong>Community Forum</strong>
+                    <p>Connect with other users, share experiences, and get tips from the community.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<style>
+:root {
+    --primary-color: #6366f1;
+    --secondary-color: #06b6d4;
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --bg-white: #ffffff;
+    --bg-light: #f9fafb;
+    --text-dark: #1f2937;
+    --text-muted: #6b7280;
+    --border-color: #e5e7eb;
+    --border-radius-md: 12px;
+    --spacing-xs: 0.5rem;
+    --spacing-sm: 1rem;
+    --spacing-md: 1.5rem;
+    --spacing-lg: 2rem;
+    --transition-fast: 0.3s ease;
+}
+
+.support-container {
+    animation: fadeIn 0.6s ease-in-out;
+}
+
+/* Hero Section */
+.hero-section {
+    position: relative;
+    background: linear-gradient(135deg, #f472b6 0%, #06b6d4 50%, #6366f1 100%);
+    border-radius: var(--border-radius-md);
+    padding: 3rem 2rem;
+    margin-bottom: 3rem;
+    overflow: hidden;
+}
+
+.hero-gradient {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(45deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+    pointer-events: none;
+}
+
+.hero-content {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    color: white;
+}
+
+.hero-content h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    animation: slideUp 0.6s ease-out;
+}
+
+.hero-content p {
+    font-size: 1.1rem;
+    opacity: 0.9;
+    animation: slideUp 0.6s ease-out 0.1s backwards;
+}
+
+/* Contact Form Section */
+.contact-section {
+    margin-bottom: 3rem;
+}
+
+.contact-card {
+    background: var(--bg-white);
+    border-radius: var(--border-radius-md);
+    padding: var(--spacing-lg);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    animation: slideUp 0.6s ease-out 0.2s backwards;
+    border: 2px solid transparent;
+    transition: all var(--transition-fast);
+}
+
+.contact-card:hover {
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+}
+
+.section-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: var(--spacing-md);
+    color: var(--text-dark);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.section-title i {
+    color: var(--primary-color);
+    font-size: 1.75rem;
+}
+
+.contact-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    font-weight: 600;
+    margin-bottom: var(--spacing-xs);
+    color: var(--text-dark);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.form-group label i {
+    color: var(--secondary-color);
+    font-size: 1.1rem;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 1rem;
+    color: var(--text-dark);
+    transition: all var(--transition-fast);
+    background: var(--bg-light);
+}
+
+.form-control:focus {
+    border-color: var(--primary-color);
+    background: var(--bg-white);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    outline: none;
+}
+
+.form-control::placeholder {
+    color: var(--text-muted);
+}
+
+textarea.form-control {
+    resize: vertical;
+    min-height: 150px;
+    font-family: inherit;
+}
+
+.btn-submit {
+    background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 1rem;
+}
+
+.btn-submit:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+}
+
+.btn-submit:active {
+    transform: translateY(0);
+}
+
+/* FAQ Section */
+.faq-section {
+    margin-bottom: 3rem;
+}
+
+.section-header {
+    margin-bottom: 2rem;
+}
+
+.section-header h2 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-dark);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    animation: slideUp 0.6s ease-out;
+}
+
+.section-header h2 i {
+    color: var(--primary-color);
+    font-size: 2rem;
+}
+
+.faq-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.faq-item {
+    background: var(--bg-white);
+    border: 2px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    overflow: hidden;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    animation: slideUp 0.6s ease-out backwards;
+    animation-delay: var(--delay, 0s);
+}
+
+.faq-item:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.15);
+}
+
+.faq-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(6, 182, 212, 0.05) 100%);
+    font-weight: 600;
+    color: var(--text-dark);
+    transition: all var(--transition-fast);
+}
+
+.faq-item.active .faq-header {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(6, 182, 212, 0.1) 100%);
+}
+
+.faq-icon {
+    font-size: 1.3rem;
+    color: var(--primary-color);
+    flex-shrink: 0;
+}
+
+.faq-question {
+    flex-grow: 1;
+    font-size: 1rem;
+}
+
+.faq-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary-color);
+    transition: transform var(--transition-fast);
+    font-size: 1.2rem;
+}
+
+.faq-item.active .faq-toggle {
+    transform: rotate(180deg);
+}
+
+.faq-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height var(--transition-fast);
+}
+
+.faq-item.active .faq-body {
+    max-height: 500px;
+    animation: slideDown 0.3s ease-out;
+}
+
+.faq-body {
+    padding: 0 1.25rem;
+}
+
+.faq-item.active .faq-body {
+    padding: 1.25rem;
+    padding-top: 0;
+}
+
+.faq-body p {
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* Tips Section */
+.tips-section {
+    margin-bottom: 3rem;
+}
+
+.tips-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--spacing-md);
+}
+
+.tip-card {
+    background: var(--bg-white);
+    border-radius: var(--border-radius-md);
+    padding: var(--spacing-lg);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    text-align: center;
+    animation: slideUp 0.6s ease-out backwards;
+    animation-delay: var(--delay, 0s);
+    transition: all var(--transition-fast);
+}
+
+.tip-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+}
+
+.tip-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto var(--spacing-md);
+    font-size: 1.5rem;
+    color: white;
+}
+
+.profile-icon {
+    background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+}
+
+.game-icon {
+    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+}
+
+.progress-icon {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.schedule-icon {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.tip-card h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: var(--spacing-xs);
+    color: var(--text-dark);
+}
+
+.tip-card p {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    margin: 0;
+}
+
+/* Resources Section */
+.resources-section {
+    margin-bottom: 2rem;
+}
+
+.resources-card {
+    background: var(--bg-white);
+    border-radius: var(--border-radius-md);
+    padding: var(--spacing-lg);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    animation: slideUp 0.6s ease-out 0.3s backwards;
+}
+
+.resources-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-md);
+}
+
+.resource-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: var(--spacing-md);
+    border-radius: 8px;
+    background: var(--bg-light);
+    animation: scaleIn 0.6s ease-out backwards;
+    animation-delay: var(--delay, 0s);
+    transition: all var(--transition-fast);
+}
+
+.resource-item:hover {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(6, 182, 212, 0.08) 100%);
+}
+
+.resource-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    color: white;
+    margin-bottom: 0.75rem;
+}
+
+.guide-icon {
+    background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+}
+
+.video-icon {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.phone-icon {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.forum-icon {
+    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+}
+
+.resource-item strong {
+    display: block;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin-bottom: var(--spacing-xs);
+    font-size: 0.95rem;
+}
+
+.resource-item p {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin: 0;
+}
+
+/* Animations */
+@@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+    }
+    to {
+        opacity: 1;
+        max-height: 500px;
+    }
+}
+
+@@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Responsive Design */
+@@media (max-width: 768px) {
+    .hero-content h1 {
+        font-size: 2rem;
+    }
+
+    .hero-content p {
+        font-size: 1rem;
+    }
+
+    .hero-section {
+        padding: 2rem 1.5rem;
+    }
+
+    .contact-card {
+        padding: var(--spacing-md);
+    }
+
+    .tips-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .resources-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .faq-header {
+        padding: 1rem;
+    }
+
+    .section-header h2 {
+        font-size: 1.5rem;
+    }
+}
+
+@@media (max-width: 480px) {
+    .hero-content h1 {
+        font-size: 1.5rem;
+    }
+
+    .hero-section {
+        padding: 1.5rem 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .tips-grid {
+        gap: 1rem;
+    }
+
+    .resources-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .contact-card {
+        padding: var(--spacing-md) 1rem;
+    }
+
+    .faq-item {
+        margin-bottom: 0.75rem;
+    }
+
+    .form-control {
+        font-size: 16px;
+    }
+}
+</style>
+
+@code {
+    // Simple accordion functionality would go here
+}

@@ -1,0 +1,132 @@
+@using AdaptiveCognitiveRehabilitationPlatform.Services
+@implements IAsyncDisposable
+@inject GameStatisticsService StatsService
+@inject GameAiAnalysisService AiService
+@inject ILogger<GameResultsComponent> Logger
+
+<div class="game-results-container">
+    <div class="results-header">
+        <h2><i class="bi bi-trophy-fill"></i> @GameType Complete!</h2>
+        <p class="results-subtitle">Great effort!</p>
+    </div>
+
+    @if (_aiAnalysis != null)
+    {
+        <div class="performance-score-badge">
+            @((int)_aiAnalysis.PerformanceScore)
+        </div>
+
+        <div class="ai-feedback-section">
+            <div class="ai-feedback-header">
+                <i class="bi bi-robot"></i>
+                <span>AI Coach Feedback</span>
+            </div>
+
+            <div class="ai-message encouragement">
+                💡 @_aiAnalysis.Encouragement
+            </div>
+
+            <div class="ai-message performance">
+                📊 @_aiAnalysis.EffortNote
+            </div>
+
+            <div class="ai-message">
+                🎮 @_aiAnalysis.FunMessage
+            </div>
+        </div>
+    }
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-card-label">Accuracy</div>
+            <div class="stat-card-value">@($"{GameResult.AccuracyPercentage:F1}%")</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-label">Speed</div>
+            <div class="stat-card-value">@($"{GameResult.SpeedScore:F1}")</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-label">Consistency</div>
+            <div class="stat-card-value">@($"{GameResult.ConsistencyScore:F1}%")</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-label">Time</div>
+            <div class="stat-card-value">@($"{GameResult.ElapsedSeconds}s")</div>
+        </div>
+    </div>
+
+    @if (_nextDifficultyLevel != GameResult.DifficultyLevel)
+    {
+        <div class="ai-message performance">
+            <strong>💪 Difficulty Recommendation:</strong>
+            Level @_nextDifficultyLevel (@(_nextDifficultyLevel > GameResult.DifficultyLevel ? "Harder" : "Easier"))
+        </div>
+    }
+
+    <div class="results-actions">
+        <button class="btn-action btn-play-again" @onclick="OnPlayAgain">
+            <i class="bi bi-arrow-clockwise"></i> Play Again
+        </button>
+        <button class="btn-action btn-home" @onclick="OnHome">
+            <i class="bi bi-house-door"></i> Back to Games
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public required GameSessionResult GameResult { get; set; }
+
+    [Parameter]
+    public required string GameType { get; set; }
+
+    [Parameter]
+    public required EventCallback OnPlayAgain { get; set; }
+
+    [Parameter]
+    public required EventCallback OnHome { get; set; }
+
+    [Parameter]
+    public string PlayerName { get; set; } = "Player";
+
+    [Parameter]
+    public int PlayerAge { get; set; } = 0;
+
+    private GameAiAnalysisService.AiAnalysisResponse? _aiAnalysis;
+    private int _nextDifficultyLevel;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            Logger.LogInformation($"🎮 Analyzing game results for {GameType}...");
+
+            // Get AI analysis
+            _aiAnalysis = await AiService.AnalyzeGamePerformanceAsync(GameResult, PlayerName, PlayerAge);
+
+            if (_aiAnalysis != null)
+            {
+                _nextDifficultyLevel = _aiAnalysis.NextDifficultyLevel;
+                Logger.LogInformation($"✅ AI Analysis Complete. Recommended Level: {_nextDifficultyLevel}");
+            }
+            else
+            {
+                _nextDifficultyLevel = GameResult.DifficultyLevel;
+                Logger.LogWarning("⚠️ AI Analysis returned null, using defaults");
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError($"❌ Error during results analysis: {ex.Message}");
+            _nextDifficultyLevel = GameResult.DifficultyLevel;
+        }
+    }
+
+    async ValueTask IAsyncDisposable.DisposeAsync()
+    {
+        // Cleanup if needed
+        await Task.CompletedTask;
+    }
+}

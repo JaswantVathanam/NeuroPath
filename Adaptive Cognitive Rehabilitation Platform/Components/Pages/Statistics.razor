@@ -1,0 +1,1565 @@
+@page "/statistics"
+@using System.Net.Http.Json
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using AdaptiveCognitiveRehabilitationPlatform.Services
+@using AdaptiveCognitiveRehabilitationPlatform.Models
+@using Microsoft.AspNetCore.Components
+@using Microsoft.JSInterop
+@inject IHttpClientFactory HttpClientFactory
+@inject IJsonActivityStatsService ActivityStatsService
+@inject ILogger<Statistics> Logger
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+
+<PageTitle>Statistics - NeuroPath</PageTitle>
+
+@if (isLoading)
+{
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <p>Loading your statistics...</p>
+    </div>
+}
+else if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="error-container">
+        <i class="bi bi-exclamation-triangle"></i>
+        <p>@errorMessage</p>
+        <button class="btn-retry" @onclick="LoadStatistics">Try Again</button>
+    </div>
+}
+else
+{
+<div class="statistics-container">
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="hero-gradient"></div>
+        <div class="hero-content">
+            <h1 class="hero-title">
+                <i class="bi bi-bar-chart-fill"></i> Statistics & Analytics
+            </h1>
+            <p class="hero-subtitle">Comprehensive insights into your cognitive performance and progress</p>
+        </div>
+    </section>
+
+    <!-- Overall Summary Cards -->
+    <section class="summary-section">
+        <h2 class="section-title"><i class="bi bi-info-circle-fill"></i> Overall Summary</h2>
+        <div class="summary-grid">
+            <div class="summary-card" style="--delay: 0s;">
+                <div class="card-icon primary">
+                    <i class="bi bi-controller"></i>
+                </div>
+                <h3>Total Sessions</h3>
+                <p class="card-value">@(statsData?.TotalSessions ?? 0)</p>
+                <p class="card-detail">Sessions completed</p>
+            </div>
+            <div class="summary-card" style="--delay: 0.1s;">
+                <div class="card-icon info">
+                    <i class="bi bi-clock"></i>
+                </div>
+                <h3>Avg. Session</h3>
+                <p class="card-value">@(statsData?.AverageSessionDuration.ToString("0.0") ?? "0") <span>min</span></p>
+                <p class="card-detail">Duration per session</p>
+            </div>
+            <div class="summary-card" style="--delay: 0.2s;">
+                <div class="card-icon success">
+                    <i class="bi bi-percent"></i>
+                </div>
+                <h3>Overall Accuracy</h3>
+                <p class="card-value">@(statsData?.OverallAccuracy.ToString("0") ?? "0")<span>%</span></p>
+                <p class="card-detail">Across all games</p>
+            </div>
+            <div class="summary-card" style="--delay: 0.3s;">
+                <div class="card-icon warning">
+                    <i class="bi bi-star-fill"></i>
+                </div>
+                <h3>Total Points</h3>
+                <p class="card-value">@(statsData?.TotalPoints ?? 0)</p>
+                <p class="card-detail">Earned</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Game Performance -->
+    <section class="performance-section">
+        <h2 class="section-title"><i class="bi bi-joystick"></i> Performance by Game</h2>
+        <div class="game-stats-grid">
+            @if (statsData?.GameStats != null && statsData.GameStats.Any())
+            {
+                var delay = 0.0;
+                @foreach (var game in statsData.GameStats)
+                {
+                    <div class="game-stat-card" style="--delay: @(delay)s;">
+                        <div class="game-stat-header @GetGameHeaderClass(game.GameType)">
+                            <i class="bi @GetGameIcon(game.GameType)"></i>
+                            <h3>@game.GameName</h3>
+                        </div>
+                        <div class="game-stat-body">
+                            <div class="stat-row">
+                                <span class="label">Average Score</span>
+                                <span class="value">@game.AverageScore.ToString("0")<small>/100</small></span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="label">Best Score</span>
+                                <span class="value">@game.BestScore<small>/100</small></span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="label">Sessions</span>
+                                <span class="value">@game.GamesPlayed</span>
+                            </div>
+                            @if (!string.IsNullOrEmpty(game.ExtraMetric))
+                            {
+                                <div class="stat-row">
+                                    <span class="label">@game.ExtraMetricLabel</span>
+                                    <span class="value">@game.ExtraMetric</span>
+                                </div>
+                            }
+                            <div class="score-bar">
+                                <div class="score-fill" style="width: @(game.AverageScore)%; --color: @game.Color;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    delay += 0.1;
+                }
+            }
+            else
+            {
+                <div class="no-data-card">
+                    <i class="bi bi-joystick"></i>
+                    <p>No game statistics yet. Play some games to see your performance!</p>
+                </div>
+            }
+        </div>
+    </section>
+
+    <!-- Activity Statistics Section -->
+    <section class="activities-stats-section">
+        <h2 class="section-title"><i class="bi bi-heart-pulse"></i> Wellness Activity Statistics</h2>
+        <div class="activity-stats-grid">
+            @if (activityStats != null && activityStats.Any())
+            {
+                var actDelay = 0.0;
+                @foreach (var activity in activityStats)
+                {
+                    <div class="activity-stat-card" style="--delay: @(actDelay)s;">
+                        <div class="activity-stat-header" style="background: linear-gradient(135deg, @activity.Color, @AdjustColor(activity.Color, -20));">
+                            <i class="bi @activity.Icon"></i>
+                            <h3>@activity.ActivityName</h3>
+                        </div>
+                        <div class="activity-stat-body">
+                            <div class="stat-row">
+                                <span class="label">Sessions Completed</span>
+                                <span class="value">@activity.TotalSessions</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="label">Total Time</span>
+                                <span class="value">@activity.TotalTimeMinutes<small> min</small></span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="label">Average Score</span>
+                                <span class="value">@activity.AverageScore.ToString("0")</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="label">Completion Rate</span>
+                                <span class="value">@activity.CompletionRate<small>%</small></span>
+                            </div>
+                            <div class="score-bar">
+                                <div class="score-fill" style="width: @(Math.Min(activity.AverageScore, 100))%; --color: @activity.Color;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    actDelay += 0.1;
+                }
+            }
+            else
+            {
+                <div class="no-data-card">
+                    <i class="bi bi-heart-pulse"></i>
+                    <p>No wellness activity statistics yet. Try activities like journaling, breathing exercises, or mental math!</p>
+                </div>
+            }
+        </div>
+    </section>
+
+    <!-- Weekly Activity Chart -->
+    <section class="activity-section">
+        <h2 class="section-title"><i class="bi bi-calendar-week"></i> Weekly Activity</h2>
+        <div class="activity-card">
+            <div class="chart-container">
+                <div class="bar-chart">
+                    @if (statsData?.WeeklyActivity != null && statsData.WeeklyActivity.Any())
+                    {
+                        var barDelay = 0.0;
+                        @foreach (var day in statsData.WeeklyActivity)
+                        {
+                            <div class="bar-item" style="--height: @(day.HeightPercent)%; --delay: @(barDelay)s;">
+                                <div class="bar"></div>
+                                <span class="day">@day.Day</span>
+                                <span class="count">@day.GamesPlayed</span>
+                            </div>
+                            barDelay += 0.1;
+                        }
+                    }
+                    else
+                    {
+                        @foreach (var day in new[] { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" })
+                        {
+                            <div class="bar-item" style="--height: 10%; --delay: 0s;">
+                                <div class="bar"></div>
+                                <span class="day">@day</span>
+                                <span class="count">0</span>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Difficulty Progression -->
+    <section class="progression-section">
+        <h2 class="section-title"><i class="bi bi-graph-up"></i> Difficulty Progression</h2>
+        <div class="progression-timeline">
+            @if (statsData?.DifficultyProgression?.Levels != null)
+            {
+                var levels = statsData.DifficultyProgression.Levels;
+                for (int i = 0; i < levels.Count; i++)
+                {
+                    var level = levels[i];
+                    <div class="progression-node @level.Status">
+                        <div class="node-content">
+                            <div class="node-number">@level.Level</div>
+                            <h4>@level.Name</h4>
+                            @if (level.Status == "completed")
+                            {
+                                <p class="node-status"><i class="bi bi-check-circle-fill"></i> Completed</p>
+                            }
+                            else if (level.Status == "active")
+                            {
+                                <p class="node-status"><i class="bi bi-hourglass-split"></i> In Progress (@(statsData.DifficultyProgression.ProgressToNext.ToString("0"))%)</p>
+                                <div class="progress-mini">
+                                    <div class="progress-mini-fill" style="width: @(statsData.DifficultyProgression.ProgressToNext)%;"></div>
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="node-status"><i class="bi bi-lock-fill"></i> Locked</p>
+                            }
+                        </div>
+                    </div>
+                    @if (i < levels.Count - 1)
+                    {
+                        var lineStatus = levels[i + 1].Status == "completed" ? "completed" : 
+                                        (level.Status == "completed" && levels[i + 1].Status == "active" ? "active" : "");
+                        <div class="progression-line @lineStatus"></div>
+                    }
+                }
+            }
+            else
+            {
+                <!-- Default progression when no data -->
+                <div class="progression-node active">
+                    <div class="node-content">
+                        <div class="node-number">1</div>
+                        <h4>Beginner</h4>
+                        <p class="node-status"><i class="bi bi-hourglass-split"></i> Start here!</p>
+                    </div>
+                </div>
+                <div class="progression-line"></div>
+                <div class="progression-node locked">
+                    <div class="node-content">
+                        <div class="node-number">2</div>
+                        <h4>Intermediate</h4>
+                        <p class="node-status"><i class="bi bi-lock-fill"></i> Locked</p>
+                    </div>
+                </div>
+                <div class="progression-line"></div>
+                <div class="progression-node locked">
+                    <div class="node-content">
+                        <div class="node-number">3</div>
+                        <h4>Advanced</h4>
+                        <p class="node-status"><i class="bi bi-lock-fill"></i> Locked</p>
+                    </div>
+                </div>
+                <div class="progression-line"></div>
+                <div class="progression-node locked">
+                    <div class="node-content">
+                        <div class="node-number">4</div>
+                        <h4>Expert</h4>
+                        <p class="node-status"><i class="bi bi-lock-fill"></i> Locked</p>
+                    </div>
+                </div>
+            }
+        </div>
+    </section>
+
+    <!-- Time Insights -->
+    <section class="insights-section">
+        <h2 class="section-title"><i class="bi bi-hourglass-end"></i> Time Insights</h2>
+        <div class="insights-grid">
+            @if (statsData?.TimeInsights != null && statsData.TimeInsights.Any())
+            {
+                var insightDelay = 0.0;
+                @foreach (var insight in statsData.TimeInsights)
+                {
+                    <div class="insight-card" style="--delay: @(insightDelay)s;">
+                        <div class="insight-icon @insight.IconClass">
+                            <i class="bi @insight.Icon"></i>
+                        </div>
+                        <h3>@insight.Title</h3>
+                        <p class="insight-value">@insight.Value</p>
+                        <p class="insight-detail">@insight.Detail</p>
+                    </div>
+                    insightDelay += 0.1;
+                }
+            }
+            else
+            {
+                <div class="insight-card" style="--delay: 0s;">
+                    <div class="insight-icon morning">
+                        <i class="bi bi-brightness-high"></i>
+                    </div>
+                    <h3>Best Performance Time</h3>
+                    <p class="insight-value">Play more to discover!</p>
+                    <p class="insight-detail">We'll analyze when you perform best.</p>
+                </div>
+
+                <div class="insight-card" style="--delay: 0.1s;">
+                    <div class="insight-icon calendar">
+                        <i class="bi bi-calendar3-week"></i>
+                    </div>
+                    <h3>Most Active Day</h3>
+                    <p class="insight-value">Not enough data</p>
+                    <p class="insight-detail">Keep playing to see patterns.</p>
+                </div>
+
+                <div class="insight-card" style="--delay: 0.2s;">
+                    <div class="insight-icon hourglass">
+                        <i class="bi bi-hourglass-split"></i>
+                    </div>
+                    <h3>Avg. Session Duration</h3>
+                    <p class="insight-value">0 Minutes</p>
+                    <p class="insight-detail">Play games to track session times.</p>
+                </div>
+
+                <div class="insight-card" style="--delay: 0.3s;">
+                    <div class="insight-icon total">
+                        <i class="bi bi-play-fill"></i>
+                    </div>
+                    <h3>Total Time Played</h3>
+                    <p class="insight-value">@FormatTime(statsData?.TotalTimePlayed ?? 0)</p>
+                    <p class="insight-detail">Total time invested in training.</p>
+                </div>
+            }
+        </div>
+    </section>
+
+    <!-- Achievements -->
+    <section class="achievements-section">
+        <h2 class="section-title"><i class="bi bi-trophy-fill"></i> Achievements</h2>
+        <div class="achievements-grid">
+            @if (statsData?.Achievements != null && statsData.Achievements.Any())
+            {
+                var achievementDelay = 0.0;
+                @foreach (var achievement in statsData.Achievements)
+                {
+                    <div class="achievement @(achievement.Unlocked ? "" : "locked")" style="--delay: @(achievementDelay)s;">
+                        <div class="achievement-glow"></div>
+                        <div class="achievement-icon @achievement.IconClass">
+                            <i class="bi @achievement.Icon"></i>
+                        </div>
+                        <p class="achievement-name">@achievement.Name</p>
+                        <p class="achievement-desc">@achievement.Description</p>
+                    </div>
+                    achievementDelay += 0.1;
+                }
+            }
+            else
+            {
+                <div class="achievement locked" style="--delay: 0s;">
+                    <div class="achievement-glow"></div>
+                    <div class="achievement-icon fire">
+                        <i class="bi bi-fire"></i>
+                    </div>
+                    <p class="achievement-name">First Streak</p>
+                    <p class="achievement-desc">Play 3 days in a row</p>
+                </div>
+
+                <div class="achievement locked" style="--delay: 0.1s;">
+                    <div class="achievement-glow"></div>
+                    <div class="achievement-icon lightning">
+                        <i class="bi bi-lightning-fill"></i>
+                    </div>
+                    <p class="achievement-name">Quick Start</p>
+                    <p class="achievement-desc">Complete 5 games</p>
+                </div>
+
+                <div class="achievement locked" style="--delay: 0.2s;">
+                    <div class="achievement-glow"></div>
+                    <div class="achievement-icon bullseye">
+                        <i class="bi bi-bullseye"></i>
+                    </div>
+                    <p class="achievement-name">Sharpshooter</p>
+                    <p class="achievement-desc">Score 90%+ accuracy</p>
+                </div>
+
+                <div class="achievement locked" style="--delay: 0.3s;">
+                    <div class="achievement-glow"></div>
+                    <div class="achievement-icon growth">
+                        <i class="bi bi-graph-up"></i>
+                    </div>
+                    <p class="achievement-name">Level Up</p>
+                    <p class="achievement-desc">Reach level 2</p>
+                </div>
+            }
+        </div>
+    </section>
+</div>
+}
+
+<style>
+    :root {
+        --primary-color: #6366f1;
+        --cyan: #06b6d4;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --spacing-xs: 0.25rem;
+        --spacing-sm: 0.5rem;
+        --spacing-md: 1rem;
+        --spacing-lg: 1.5rem;
+        --spacing-xl: 2rem;
+        --spacing-2xl: 3rem;
+        --border-radius-sm: 0.375rem;
+        --border-radius-md: 0.5rem;
+        --border-radius-lg: 1rem;
+        --border-color: #e5e7eb;
+    }
+
+    /* Loading & Error States */
+    .loading-container, .error-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 60vh;
+        gap: 1rem;
+        color: #06b6d4;
+    }
+
+    .spinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid #e5e7eb;
+        border-top-color: #06b6d4;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .error-container {
+        color: #ef4444;
+    }
+
+    .error-container i {
+        font-size: 3rem;
+    }
+
+    .btn-retry {
+        background: #06b6d4;
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background 0.2s;
+    }
+
+    .btn-retry:hover {
+        background: #0891b2;
+    }
+
+    .no-data-card {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem;
+        background: linear-gradient(135deg, rgba(6, 182, 212, 0.05), rgba(8, 145, 178, 0.05));
+        border: 2px dashed rgba(6, 182, 212, 0.3);
+        border-radius: var(--border-radius-lg);
+        color: #6b7280;
+        gap: 0.75rem;
+    }
+
+    .no-data-card i {
+        font-size: 2.5rem;
+        color: #06b6d4;
+        opacity: 0.5;
+    }
+
+    .achievement.locked {
+        opacity: 0.5;
+        filter: grayscale(0.5);
+    }
+
+    .statistics-container {
+        animation: fadeIn 0.6s ease-out;
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: var(--spacing-lg);
+    }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes scaleIn {
+        from {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+        to {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    /* Hero Section */
+    .hero-section {
+        position: relative;
+        border-radius: var(--border-radius-lg);
+        overflow: hidden;
+        margin-bottom: var(--spacing-2xl);
+        color: white;
+    }
+
+    .hero-gradient {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, #06b6d4 0%, #0891b2 50%, #06b6d4 100%);
+        opacity: 0.95;
+    }
+
+    .hero-content {
+        position: relative;
+        z-index: 2;
+        padding: var(--spacing-2xl);
+        backdrop-filter: blur(10px);
+    }
+
+    .hero-title {
+        font-size: 2.5rem;
+        font-weight: 800;
+        margin-bottom: var(--spacing-md);
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-md);
+    }
+
+    .hero-title i {
+        font-size: 2.25rem;
+    }
+
+    .hero-subtitle {
+        font-size: 1.1rem;
+        opacity: 0.95;
+    }
+
+    /* Section Title */
+    .section-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: var(--spacing-lg);
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-md);
+        color: #1f2937;
+    }
+
+    .section-title i {
+        font-size: 1.75rem;
+        color: var(--primary-color);
+    }
+
+    /* Summary Section */
+    .summary-section {
+        margin-bottom: var(--spacing-2xl);
+    }
+
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: var(--spacing-lg);
+    }
+
+    .summary-card {
+        background: white;
+        border-radius: var(--border-radius-lg);
+        padding: var(--spacing-lg);
+        border: 2px solid #f3f4f6;
+        text-align: center;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: slideUp 0.6s ease-out backwards;
+        animation-delay: var(--delay, 0s);
+    }
+
+    .summary-card:hover {
+        transform: translateY(-8px);
+        border-color: var(--primary-color);
+        box-shadow: 0 20px 40px rgba(99, 102, 241, 0.1);
+    }
+
+    .card-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 60px;
+        height: 60px;
+        border-radius: var(--border-radius-lg);
+        font-size: 1.75rem;
+        color: white;
+        margin-bottom: var(--spacing-md);
+    }
+
+    .card-icon.primary {
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    }
+
+    .card-icon.info {
+        background: linear-gradient(135deg, #06b6d4, #0891b2);
+    }
+
+    .card-icon.success {
+        background: linear-gradient(135deg, #10b981, #059669);
+    }
+
+    .card-icon.warning {
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+    }
+
+    .summary-card h3 {
+        font-size: 0.95rem;
+        color: #6b7280;
+        margin-bottom: var(--spacing-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-weight: 600;
+    }
+
+    .card-value {
+        font-size: 2rem;
+        font-weight: 800;
+        color: #1f2937;
+        margin: 0;
+    }
+
+    .card-value span {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .card-detail {
+        font-size: 0.875rem;
+        color: #9ca3af;
+        margin: var(--spacing-xs) 0 0 0;
+    }
+
+    /* Performance Section */
+    .performance-section {
+        margin-bottom: var(--spacing-2xl);
+    }
+
+    .game-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: var(--spacing-lg);
+    }
+
+    /* Activity Stats Section */
+    .activities-stats-section {
+        margin-bottom: var(--spacing-2xl);
+    }
+
+    .activity-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: var(--spacing-lg);
+    }
+
+    .activity-stat-card {
+        background: white;
+        border-radius: var(--border-radius-lg);
+        overflow: hidden;
+        border: 1px solid #f3f4f6;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: slideUp 0.6s ease-out backwards;
+        animation-delay: var(--delay, 0s);
+    }
+
+    .activity-stat-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.1);
+    }
+
+    .activity-stat-header {
+        padding: var(--spacing-lg);
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-md);
+        color: white;
+    }
+
+    .activity-stat-header i {
+        font-size: 1.75rem;
+    }
+
+    .activity-stat-header h3 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 700;
+    }
+
+    .activity-stat-body {
+        padding: var(--spacing-lg);
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-md);
+    }
+
+    /* Game Stats Section */
+    .game-stat-card {
+        background: white;
+        border-radius: var(--border-radius-lg);
+        overflow: hidden;
+        border: 1px solid #f3f4f6;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: slideUp 0.6s ease-out backwards;
+        animation-delay: var(--delay, 0s);
+    }
+
+    .game-stat-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.1);
+    }
+
+    .game-stat-header {
+        padding: var(--spacing-lg);
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-md);
+        color: white;
+    }
+
+    .game-stat-header.memory-match {
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    }
+
+    .game-stat-header.reaction-trainer {
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+    }
+
+    .game-stat-header.sorting-task {
+        background: linear-gradient(135deg, #10b981, #059669);
+    }
+
+    .game-stat-header.trail-making {
+        background: linear-gradient(135deg, #0ea5e9, #0284c7);
+    }
+
+    .game-stat-header.dual-task {
+        background: linear-gradient(135deg, #ec4899, #be185d);
+    }
+
+    .game-stat-header.stroop-test {
+        background: linear-gradient(135deg, #a855f7, #7c3aed);
+    }
+
+    .game-stat-header i {
+        font-size: 1.75rem;
+    }
+
+    .game-stat-header h3 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 700;
+    }
+
+    .game-stat-body {
+        padding: var(--spacing-lg);
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-md);
+    }
+
+    .stat-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: var(--spacing-sm);
+        background: #f9fafb;
+        border-radius: var(--border-radius-md);
+        transition: all 0.3s ease;
+    }
+
+    .stat-row:hover {
+        background: #f3f4f6;
+        transform: translateX(4px);
+    }
+
+    .stat-row .label {
+        font-size: 0.875rem;
+        color: #6b7280;
+        font-weight: 500;
+    }
+
+    .stat-row .value {
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .stat-row .value small {
+        font-size: 0.75rem;
+        color: #9ca3af;
+        margin-left: 0.25rem;
+    }
+
+    .score-bar {
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 10px;
+        overflow: hidden;
+        margin-top: var(--spacing-sm);
+    }
+
+    .score-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--color), color-mix(in srgb, var(--color) 80%, white));
+        border-radius: 10px;
+        transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Activity Section */
+    .activity-section {
+        margin-bottom: var(--spacing-2xl);
+    }
+
+    .activity-card {
+        background: white;
+        border-radius: var(--border-radius-lg);
+        padding: var(--spacing-2xl);
+        border: 1px solid #f3f4f6;
+        animation: slideUp 0.6s ease-out;
+    }
+
+    .chart-container {
+        display: flex;
+        justify-content: center;
+    }
+
+    .bar-chart {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-around;
+        height: 250px;
+        gap: var(--spacing-lg);
+        width: 100%;
+    }
+
+    .bar-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex: 1;
+        gap: var(--spacing-sm);
+        min-width: 40px;
+    }
+
+    .bar-item .bar {
+        width: 100%;
+        height: calc(var(--height) * 200px);
+        background: linear-gradient(180deg, #6366f1 0%, #8b5cf6 100%);
+        border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
+        animation: barGrow 1s ease-out backwards;
+        animation-delay: var(--delay, 0s);
+        transition: all 0.3s ease;
+    }
+
+    .bar-item:hover .bar {
+        filter: brightness(1.1);
+        transform: scaleY(1.05);
+    }
+
+    @@keyframes barGrow {
+        from { height: 0; }
+        to { height: calc(var(--height) * 200px); }
+    }
+
+    .bar-item .day {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .bar-item .count {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: var(--primary-color);
+        opacity: 0.7;
+    }
+
+    /* Progression Section */
+    .progression-section {
+        margin-bottom: var(--spacing-2xl);
+    }
+
+    .progression-timeline {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        background: white;
+        border-radius: var(--border-radius-lg);
+        padding: var(--spacing-2xl);
+        border: 1px solid #f3f4f6;
+    }
+
+    .progression-node {
+        flex: 1;
+        text-align: center;
+        position: relative;
+        z-index: 2;
+        animation: slideUp 0.6s ease-out backwards;
+    }
+
+    .progression-node:nth-child(odd) {
+        animation-delay: 0s;
+    }
+
+    .progression-node:nth-child(3) {
+        animation-delay: 0.2s;
+    }
+
+    .progression-node:nth-child(5) {
+        animation-delay: 0.3s;
+    }
+
+    .progression-node:nth-child(7) {
+        animation-delay: 0.4s;
+    }
+
+    .node-content {
+        padding: var(--spacing-lg);
+    }
+
+    .node-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: white;
+        margin-bottom: var(--spacing-md);
+    }
+
+    .progression-node.completed .node-number {
+        background: linear-gradient(135deg, #10b981, #059669);
+    }
+
+    .progression-node.active .node-number {
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    .progression-node.locked .node-number {
+        background: #d1d5db;
+    }
+
+    @@keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+    }
+
+    .node-content h4 {
+        margin: 0 0 var(--spacing-xs) 0;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .node-status {
+        margin: 0;
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .node-status i {
+        margin-right: var(--spacing-xs);
+    }
+
+    .progress-mini {
+        margin-top: var(--spacing-md);
+        height: 4px;
+        background: #e5e7eb;
+        border-radius: 2px;
+        overflow: hidden;
+    }
+
+    .progress-mini-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #6366f1, #8b5cf6);
+        animation: fillBar 1.5s ease-out forwards;
+    }
+
+    .progression-line {
+        flex: 0.5;
+        height: 3px;
+        background: #e5e7eb;
+        margin: 0 var(--spacing-sm);
+        position: relative;
+    }
+
+    .progression-line.completed {
+        background: linear-gradient(90deg, #10b981, #10b981);
+    }
+
+    .progression-line.active {
+        background: linear-gradient(90deg, #6366f1, #e5e7eb);
+    }
+
+    /* Insights Section */
+    .insights-section {
+        margin-bottom: var(--spacing-2xl);
+    }
+
+    .insights-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: var(--spacing-lg);
+    }
+
+    .insight-card {
+        background: white;
+        border-radius: var(--border-radius-lg);
+        padding: var(--spacing-lg);
+        border: 1px solid #f3f4f6;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: slideUp 0.6s ease-out backwards;
+        animation-delay: var(--delay, 0s);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .insight-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--insight-color), transparent);
+    }
+
+    .insight-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    }
+
+    .insight-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 50px;
+        height: 50px;
+        border-radius: var(--border-radius-lg);
+        font-size: 1.5rem;
+        color: white;
+        margin-bottom: var(--spacing-md);
+    }
+
+    .insight-icon.morning {
+        background: linear-gradient(135deg, #fbbf24, #f59e0b);
+        --insight-color: #f59e0b;
+    }
+
+    .insight-icon.calendar {
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        --insight-color: #6366f1;
+    }
+
+    .insight-icon.hourglass {
+        background: linear-gradient(135deg, #06b6d4, #0891b2);
+        --insight-color: #06b6d4;
+    }
+
+    .insight-icon.total {
+        background: linear-gradient(135deg, #10b981, #059669);
+        --insight-color: #10b981;
+    }
+
+    .insight-card h3 {
+        margin: 0 0 var(--spacing-sm) 0;
+        font-size: 0.95rem;
+        color: #6b7280;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .insight-value {
+        margin: 0 0 var(--spacing-xs) 0;
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: #1f2937;
+    }
+
+    .insight-detail {
+        margin: 0;
+        font-size: 0.875rem;
+        color: #9ca3af;
+        line-height: 1.5;
+    }
+
+    /* Achievements Section */
+    .achievements-section {
+        margin-bottom: var(--spacing-lg);
+    }
+
+    .achievements-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: var(--spacing-lg);
+    }
+
+    .achievement {
+        background: white;
+        border-radius: var(--border-radius-lg);
+        padding: var(--spacing-lg);
+        border: 2px solid #f3f4f6;
+        text-align: center;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: scaleIn 0.6s ease-out backwards;
+        animation-delay: var(--delay, 0s);
+        position: relative;
+        cursor: pointer;
+    }
+
+    .achievement:hover {
+        transform: scale(1.08);
+        border-color: transparent;
+    }
+
+    .achievement-glow {
+        position: absolute;
+        inset: 0;
+        border-radius: var(--border-radius-lg);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        background: radial-gradient(circle, rgba(99, 102, 241, 0.2) 0%, transparent 70%);
+    }
+
+    .achievement:hover .achievement-glow {
+        opacity: 1;
+    }
+
+    .achievement-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        font-size: 2rem;
+        color: white;
+        margin-bottom: var(--spacing-md);
+        position: relative;
+        z-index: 1;
+    }
+
+    .achievement-icon.fire {
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+    }
+
+    .achievement-icon.lightning {
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+    }
+
+    .achievement-icon.bullseye {
+        background: linear-gradient(135deg, #ec4899, #db2777);
+    }
+
+    .achievement-icon.growth {
+        background: linear-gradient(135deg, #10b981, #059669);
+    }
+
+    .achievement-name {
+        margin: 0 0 var(--spacing-xs) 0;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .achievement-desc {
+        margin: 0;
+        font-size: 0.75rem;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    /* Responsive */
+    @@media (max-width: 768px) {
+        .hero-content {
+            padding: var(--spacing-lg);
+        }
+
+        .hero-title {
+            font-size: 1.75rem;
+        }
+
+        .hero-title i {
+            font-size: 1.5rem;
+        }
+
+        .summary-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .game-stats-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .bar-chart {
+            height: 200px;
+        }
+
+        .progression-timeline {
+            flex-direction: column;
+            gap: var(--spacing-lg);
+        }
+
+        .progression-line {
+            width: 3px;
+            height: 20px;
+            margin: 0;
+        }
+
+        .insights-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .achievements-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @@media (max-width: 480px) {
+        .statistics-container {
+            padding: var(--spacing-md);
+        }
+
+        .hero-title {
+            font-size: 1.5rem;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+        }
+
+        .summary-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .insights-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .achievements-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .achievement-icon {
+            width: 60px;
+            height: 60px;
+            font-size: 1.75rem;
+        }
+    }
+</style>
+
+
+@code {
+    private bool isLoading = true;
+    private string? errorMessage;
+    private int userId = 0;
+    private StatisticsDataDto? statsData;
+    private List<ActivityStatsItemDto>? activityStats;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // Get user ID from localStorage
+                var userIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+                if (!string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out var parsedUserId))
+                {
+                    userId = parsedUserId;
+                    await LoadStatistics();
+                }
+                else
+                {
+                    // Default user for demo
+                    userId = 1;
+                    await LoadStatistics();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.LogError($"Error loading user ID: {ex.Message}");
+                userId = 1;
+                await LoadStatistics();
+            }
+        }
+    }
+
+    private async Task LoadStatistics()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            StateHasChanged();
+
+            var baseUrl = NavigationManager.BaseUri;
+            var httpClient = HttpClientFactory.CreateClient();
+            
+            // JSON options with case-insensitive property matching
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+            
+            Console.WriteLine($"[Statistics] Loading data for userId: {userId}");
+            
+            // Load game stats via HTTP (existing pattern)
+            var gameStatsTask = httpClient.GetFromJsonAsync<StatisticsDataDto>($"{baseUrl}api/json-stats/statistics/{userId}", jsonOptions);
+            
+            // Load activity stats directly from service (bypassing HTTP)
+            var activityStatsFromServiceTask = ActivityStatsService.GetActivityProgressByUserIdAsync(userId);
+
+            await Task.WhenAll(gameStatsTask, activityStatsFromServiceTask);
+
+            statsData = await gameStatsTask;
+            var activityStatsFromService = await activityStatsFromServiceTask;
+            
+            // Convert service result to DTO format
+            activityStats = activityStatsFromService?.Select(a => new ActivityStatsItemDto
+            {
+                ActivityType = a.ActivityType,
+                ActivityName = a.ActivityName,
+                Icon = a.Icon,
+                Color = a.Color,
+                TotalSessions = a.TotalSessions,
+                TotalTimeMinutes = a.TotalTimeMinutes,
+                AverageScore = a.AverageScore,
+                AverageAccuracy = a.AverageAccuracy,
+                CompletionRate = a.CompletionRate,
+                LastSession = a.LastSession
+            }).ToList() ?? new List<ActivityStatsItemDto>();
+            
+            Console.WriteLine($"[Statistics] Activity stats loaded: {activityStats?.Count ?? 0} items");
+
+            Logger?.LogInformation($"Statistics data loaded successfully for user {userId}");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load statistics: {ex.Message}";
+            Logger?.LogError($"Error loading statistics: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    // Activity Stats DTO
+    public class ActivityStatsItemDto
+    {
+        [JsonPropertyName("activityType")]
+        public string ActivityType { get; set; } = "";
+        [JsonPropertyName("activityName")]
+        public string ActivityName { get; set; } = "";
+        [JsonPropertyName("icon")]
+        public string Icon { get; set; } = "";
+        [JsonPropertyName("color")]
+        public string Color { get; set; } = "";
+        [JsonPropertyName("totalSessions")]
+        public int TotalSessions { get; set; }
+        [JsonPropertyName("totalTimeMinutes")]
+        public int TotalTimeMinutes { get; set; }
+        [JsonPropertyName("averageScore")]
+        public double AverageScore { get; set; }
+        [JsonPropertyName("averageAccuracy")]
+        public double AverageAccuracy { get; set; }
+        [JsonPropertyName("completionRate")]
+        public int CompletionRate { get; set; }
+        [JsonPropertyName("lastSession")]
+        public DateTime? LastSession { get; set; }
+    }
+
+    // Helper method for adjusting colors
+    private string AdjustColor(string hexColor, int amount)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(hexColor) || !hexColor.StartsWith("#"))
+                return hexColor;
+            
+            var color = hexColor.TrimStart('#');
+            int r = Math.Max(0, Math.Min(255, int.Parse(color.Substring(0, 2), System.Globalization.NumberStyles.HexNumber) + amount));
+            int g = Math.Max(0, Math.Min(255, int.Parse(color.Substring(2, 2), System.Globalization.NumberStyles.HexNumber) + amount));
+            int b = Math.Max(0, Math.Min(255, int.Parse(color.Substring(4, 2), System.Globalization.NumberStyles.HexNumber) + amount));
+            return $"#{r:X2}{g:X2}{b:X2}";
+        }
+        catch
+        {
+            return hexColor;
+        }
+    }
+
+    // DTO classes for JSON data
+    public class StatisticsDataDto
+    {
+        public int TotalSessions { get; set; }
+        public decimal AverageSessionDuration { get; set; }
+        public decimal OverallAccuracy { get; set; }
+        public int TotalPoints { get; set; }
+        public int TotalTimePlayed { get; set; }
+        public List<GameStatsItemDto>? GameStats { get; set; }
+        public List<WeeklyActivityItemDto>? WeeklyActivity { get; set; }
+        public List<TimeInsightItemDto>? TimeInsights { get; set; }
+        public List<AchievementItemDto>? Achievements { get; set; }
+        public DifficultyProgressionDto? DifficultyProgression { get; set; }
+    }
+
+    public class GameStatsItemDto
+    {
+        public string GameType { get; set; } = "";
+        public string GameName { get; set; } = "";
+        public string Icon { get; set; } = "";
+        public string Color { get; set; } = "";
+        public int GamesPlayed { get; set; }
+        public decimal AverageScore { get; set; }
+        public int BestScore { get; set; }
+        public decimal AverageAccuracy { get; set; }
+        public string ExtraMetric { get; set; } = "";
+        public string ExtraMetricLabel { get; set; } = "";
+    }
+
+    public class WeeklyActivityItemDto
+    {
+        public string Day { get; set; } = "";
+        public int GamesPlayed { get; set; }
+        public double HeightPercent { get; set; }
+    }
+
+    public class TimeInsightItemDto
+    {
+        public string Icon { get; set; } = "";
+        public string IconClass { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Value { get; set; } = "";
+        public string Detail { get; set; } = "";
+    }
+
+    public class AchievementItemDto
+    {
+        public string Icon { get; set; } = "";
+        public string IconClass { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public bool Unlocked { get; set; }
+    }
+
+    public class DifficultyProgressionDto
+    {
+        public int CurrentLevel { get; set; }
+        public string CurrentLevelName { get; set; } = "";
+        public decimal ProgressToNext { get; set; }
+        public List<LevelDto>? Levels { get; set; }
+    }
+
+    public class LevelDto
+    {
+        public int Level { get; set; }
+        public string Name { get; set; } = "";
+        public string Status { get; set; } = ""; // completed, active, locked
+    }
+
+    // Helper methods
+    private string GetGameHeaderClass(string gameType) => gameType?.ToLower() switch
+    {
+        "memorymatch" => "memory-match",
+        "reactiontrainer" => "reaction-trainer",
+        "sortingtask" => "sorting-task",
+        "trailmaking" => "trail-making",
+        "dualtask" => "dual-task",
+        "strooptest" => "stroop-test",
+        _ => "memory-match"
+    };
+
+    private string GetGameIcon(string gameType) => gameType?.ToLower() switch
+    {
+        "memorymatch" => "bi-memory",
+        "reactiontrainer" => "bi-lightning-fill",
+        "sortingtask" => "bi-sort-down",
+        "trailmaking" => "bi-bezier2",
+        "dualtask" => "bi-diagram-3",
+        "strooptest" => "bi-palette",
+        _ => "bi-controller"
+    };
+
+    private string FormatTime(int seconds)
+    {
+        if (seconds < 60) return $"{seconds}s";
+        if (seconds < 3600) return $"{seconds / 60}m {seconds % 60}s";
+        return $"{seconds / 3600}h {(seconds % 3600) / 60}m";
+    }
+}

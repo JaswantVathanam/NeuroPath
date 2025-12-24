@@ -1,0 +1,857 @@
+@page "/activities/daily-journal"
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject HttpClient Http
+@inject ActivityAIAnalysisService AIService
+
+<PageTitle>Daily Journal - NeuroPath</PageTitle>
+
+<div class="journal-container">
+    <!-- Header -->
+    <div class="journal-header">
+        <button class="back-btn" @onclick="GoBack">
+            <i class="bi bi-arrow-left"></i>
+        </button>
+        <div class="header-content">
+            <h1><i class="bi bi-journal-text"></i> Daily Journal</h1>
+            <p>Write about your day, thoughts, and experiences</p>
+        </div>
+    </div>
+
+    <div class="journal-layout">
+        <!-- Sidebar -->
+        <aside class="journal-sidebar">
+            <div class="date-display">
+                <i class="bi bi-calendar3"></i>
+                <span>@DateTime.Now.ToString("dddd, MMMM d, yyyy")</span>
+            </div>
+
+            <div class="prompt-card">
+                <h3><i class="bi bi-lightbulb"></i> Today's Prompt</h3>
+                <p>@currentPrompt</p>
+                <button class="new-prompt-btn" @onclick="GetNewPrompt">
+                    <i class="bi bi-shuffle"></i> New Prompt
+                </button>
+            </div>
+
+            <div class="stats-card">
+                <h3><i class="bi bi-graph-up"></i> Your Stats</h3>
+                <div class="stat-item">
+                    <span class="stat-label">Words Written</span>
+                    <span class="stat-value">@wordCount</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Time Spent</span>
+                    <span class="stat-value">@timeSpent</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Entries This Week</span>
+                    <span class="stat-value">@entriesThisWeek</span>
+                </div>
+            </div>
+
+            <div class="mood-card">
+                <h3><i class="bi bi-emoji-smile"></i> How are you feeling?</h3>
+                <div class="mood-options">
+                    @foreach (var mood in moods)
+                    {
+                        <button class="mood-btn @(selectedMood == mood.Name ? "selected" : "")" 
+                                @onclick="() => SelectMood(mood.Name)"
+                                title="@mood.Name">
+                            <span>@mood.Emoji</span>
+                        </button>
+                    }
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Journal Area -->
+        <main class="journal-main">
+            <div class="journal-paper">
+                <div class="paper-header">
+                    <input type="text" class="title-input" placeholder="Give your entry a title..." @bind="entryTitle" />
+                </div>
+                <textarea class="journal-textarea" 
+                          placeholder="Start writing your thoughts here... 
+
+What happened today? 
+How did it make you feel? 
+What are you grateful for?
+What did you learn?"
+                          @bind="journalContent"
+                          @oninput="OnContentChanged"></textarea>
+            </div>
+
+            <div class="journal-actions">
+                <div class="action-left">
+                    <span class="autosave-status">
+                        @if (isSaving)
+                        {
+                            <i class="bi bi-arrow-repeat spinning"></i>
+                            <span>Saving...</span>
+                        }
+                        else if (lastSaved != null)
+                        {
+                            <i class="bi bi-check-circle"></i>
+                            <span>Saved at @lastSaved?.ToString("h:mm tt")</span>
+                        }
+                    </span>
+                </div>
+                <div class="action-right">
+                    <button class="clear-btn" @onclick="ClearEntry">
+                        <i class="bi bi-eraser"></i> Clear
+                    </button>
+                    <button class="save-btn" @onclick="SaveEntry">
+                        <i class="bi bi-save"></i> Save Entry
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+@if (showSavedMessage)
+{
+    <div class="toast-notification success">
+        <i class="bi bi-check-circle-fill"></i>
+        <span>Journal entry saved successfully!</span>
+    </div>
+}
+
+@if (showAIFeedback)
+{
+    <div class="ai-overlay">
+        <div class="ai-feedback-card">
+            <button class="close-ai-btn" @onclick="CloseAIFeedback">
+                <i class="bi bi-x-lg"></i>
+            </button>
+            @if (isLoadingAIFeedback)
+            {
+                <div class="ai-loading">
+                    <i class="bi bi-robot spinning"></i>
+                    <span>AI is reflecting on your journal entry...</span>
+                </div>
+            }
+            else if (aiAnalysis != null)
+            {
+                <div class="ai-header">
+                    <i class="bi bi-robot"></i>
+                    <span>AI Reflection Coach</span>
+                </div>
+                <div class="ai-content">
+                    <p>@aiAnalysis.Feedback</p>
+                    @if (!string.IsNullOrEmpty(aiAnalysis.Recommendation))
+                    {
+                        <div class="ai-recommendation">
+                            <strong><i class="bi bi-heart"></i> Insight:</strong>
+                            <span>@aiAnalysis.Recommendation</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private string entryTitle = "";
+    private string journalContent = "";
+    private string currentPrompt = "";
+    private string selectedMood = "";
+    private int wordCount = 0;
+    private string timeSpent = "0 min";
+    private int entriesThisWeek = 3;
+    private bool isSaving = false;
+    private DateTime? lastSaved = null;
+    private bool showSavedMessage = false;
+    private DateTime startTime;
+    private int currentUserId = 1; // Default user ID - in production, get from auth
+    
+    // AI Analysis variables
+    private ActivityAIResult? aiAnalysis;
+    private bool isLoadingAIFeedback = false;
+    private bool showAIFeedback = false;
+
+    private class ActivityAIResult
+    {
+        public string Feedback { get; set; } = "";
+        public string Recommendation { get; set; } = "";
+        public int CognitiveScore { get; set; }
+        public List<string> StrengthAreas { get; set; } = new();
+        public List<string> ImprovementAreas { get; set; } = new();
+    }
+
+    private List<(string Name, string Emoji)> moods = new()
+    {
+        ("Happy", "😊"),
+        ("Calm", "😌"),
+        ("Excited", "🤩"),
+        ("Thoughtful", "🤔"),
+        ("Tired", "😴"),
+        ("Stressed", "😰"),
+        ("Grateful", "🙏"),
+        ("Hopeful", "✨")
+    };
+
+    private List<string> prompts = new()
+    {
+        "What made you smile today?",
+        "Describe a challenge you overcame recently.",
+        "What are three things you're grateful for?",
+        "Write about a person who inspires you.",
+        "What's something new you learned this week?",
+        "Describe your ideal peaceful moment.",
+        "What goal are you working towards?",
+        "Write about a happy memory from your childhood.",
+        "What would you tell your younger self?",
+        "Describe something beautiful you noticed today.",
+        "What's a skill you'd like to develop?",
+        "Write about someone who helped you recently.",
+        "What does success mean to you?",
+        "Describe your favorite place to relax.",
+        "What are you looking forward to?"
+    };
+
+    protected override void OnInitialized()
+    {
+        startTime = DateTime.Now;
+        GetNewPrompt();
+    }
+
+    private void GetNewPrompt()
+    {
+        var random = new Random();
+        currentPrompt = prompts[random.Next(prompts.Count)];
+    }
+
+    private void SelectMood(string mood)
+    {
+        selectedMood = mood;
+    }
+
+    private void OnContentChanged(ChangeEventArgs e)
+    {
+        journalContent = e.Value?.ToString() ?? "";
+        wordCount = string.IsNullOrWhiteSpace(journalContent) 
+            ? 0 
+            : journalContent.Split(new[] { ' ', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
+        
+        var elapsed = DateTime.Now - startTime;
+        timeSpent = elapsed.TotalMinutes < 1 
+            ? "< 1 min" 
+            : $"{(int)elapsed.TotalMinutes} min";
+    }
+
+    private async Task SaveEntry()
+    {
+        if (string.IsNullOrWhiteSpace(journalContent)) return;
+
+        isSaving = true;
+        StateHasChanged();
+
+        try
+        {
+            var durationSeconds = (int)(DateTime.Now - startTime).TotalSeconds;
+            var activityData = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                title = entryTitle,
+                wordCount = wordCount,
+                mood = selectedMood,
+                promptUsed = currentPrompt,
+                entryLength = journalContent.Length
+            });
+
+            var request = new
+            {
+                userId = currentUserId,
+                username = $"User{currentUserId}",
+                activityType = "DailyJournal",
+                activityName = "Daily Journal",
+                durationSeconds = durationSeconds,
+                score = Math.Min(100, wordCount / 2), // Score based on word count
+                accuracy = 100m,
+                completionPercentage = 100,
+                difficulty = "Standard",
+                activityData = activityData,
+                moodBefore = "",
+                moodAfter = selectedMood
+            };
+
+            var apiUrl = $"{Navigation.BaseUri}api/activities/save";
+            await Http.PostAsJsonAsync(apiUrl, request);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving activity: {ex.Message}");
+        }
+
+        isSaving = false;
+        lastSaved = DateTime.Now;
+        showSavedMessage = true;
+        StateHasChanged();
+
+        // Load AI feedback after saving
+        await LoadAIFeedback();
+
+        await Task.Delay(3000);
+        showSavedMessage = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadAIFeedback()
+    {
+        if (wordCount < 10) return; // Skip AI for very short entries
+        
+        isLoadingAIFeedback = true;
+        showAIFeedback = true;
+        StateHasChanged();
+
+        try
+        {
+            var durationSeconds = (int)(DateTime.Now - startTime).TotalSeconds;
+            var session = new AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession
+            {
+                UserId = currentUserId,
+                ActivityType = "DailyJournal",
+                StartTime = startTime,
+                EndTime = DateTime.UtcNow,
+                DurationSeconds = durationSeconds,
+                Score = Math.Min(100, wordCount / 2),
+                Accuracy = 100,
+                Difficulty = "Standard",
+                ActivityData = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    title = entryTitle,
+                    wordCount,
+                    mood = selectedMood,
+                    promptUsed = currentPrompt,
+                    entryLength = journalContent.Length,
+                    writingTimeMinutes = durationSeconds / 60
+                })
+            };
+
+            var result = await AIService.AnalyzeActivityPerformanceAsync(session, new List<AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession>());
+            aiAnalysis = new ActivityAIResult
+            {
+                Feedback = result.Encouragement,
+                Recommendation = result.PatternAnalysis,
+                CognitiveScore = 0,
+                StrengthAreas = result.CognitiveStrengths,
+                ImprovementAreas = result.AreasForGrowth
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"AI analysis error: {ex.Message}");
+            aiAnalysis = new ActivityAIResult
+            {
+                Feedback = wordCount >= 100 
+                    ? "Wonderful reflection! Writing helps process emotions and thoughts effectively." 
+                    : wordCount >= 50 
+                    ? "Good journaling session! Regular writing builds self-awareness." 
+                    : "Thank you for taking time to write. Every word contributes to your wellbeing.",
+                Recommendation = !string.IsNullOrEmpty(selectedMood) 
+                    ? $"You noted feeling {selectedMood}. Tracking moods over time reveals helpful patterns." 
+                    : "Try selecting a mood before writing to track your emotional patterns."
+            };
+        }
+        finally
+        {
+            isLoadingAIFeedback = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseAIFeedback()
+    {
+        showAIFeedback = false;
+    }
+
+    private void ClearEntry()
+    {
+        entryTitle = "";
+        journalContent = "";
+        wordCount = 0;
+        selectedMood = "";
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/games");
+    }
+}
+
+<style>
+    .journal-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #fdf2f8 0%, #fce7f3 50%, #fbcfe8 100%);
+    }
+
+    .journal-header {
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        color: white;
+        padding: 1.5rem 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .back-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        border: 2px solid rgba(255,255,255,0.3);
+        background: rgba(255,255,255,0.1);
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        transition: all 200ms;
+    }
+
+    .back-btn:hover {
+        background: rgba(255,255,255,0.2);
+        transform: translateX(-3px);
+    }
+
+    .header-content h1 {
+        margin: 0;
+        font-size: 1.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .header-content p {
+        margin: 0.25rem 0 0 0;
+        opacity: 0.9;
+    }
+
+    .journal-layout {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: 2rem;
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+
+    .journal-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .date-display {
+        background: white;
+        padding: 1rem 1.25rem;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-weight: 600;
+        color: #be185d;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    }
+
+    .date-display i {
+        font-size: 1.25rem;
+    }
+
+    .prompt-card, .stats-card, .mood-card {
+        background: white;
+        padding: 1.25rem;
+        border-radius: 16px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    }
+
+    .prompt-card h3, .stats-card h3, .mood-card h3 {
+        margin: 0 0 1rem 0;
+        font-size: 1rem;
+        color: #374151;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .prompt-card h3 i { color: #f59e0b; }
+    .stats-card h3 i { color: #10b981; }
+    .mood-card h3 i { color: #ec4899; }
+
+    .prompt-card p {
+        color: #6b7280;
+        font-style: italic;
+        line-height: 1.6;
+        margin: 0 0 1rem 0;
+    }
+
+    .new-prompt-btn {
+        width: 100%;
+        padding: 0.625rem;
+        border: 2px dashed #e5e7eb;
+        border-radius: 8px;
+        background: transparent;
+        color: #6b7280;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 0.875rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .new-prompt-btn:hover {
+        border-color: #ec4899;
+        color: #ec4899;
+        background: #fdf2f8;
+    }
+
+    .stat-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.625rem 0;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    .stat-item:last-child {
+        border-bottom: none;
+    }
+
+    .stat-label {
+        color: #6b7280;
+        font-size: 0.875rem;
+    }
+
+    .stat-value {
+        font-weight: 700;
+        color: #ec4899;
+    }
+
+    .mood-options {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.5rem;
+    }
+
+    .mood-btn {
+        width: 100%;
+        aspect-ratio: 1;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        background: white;
+        font-size: 1.5rem;
+        cursor: pointer;
+        transition: all 200ms;
+    }
+
+    .mood-btn:hover {
+        border-color: #ec4899;
+        transform: scale(1.1);
+    }
+
+    .mood-btn.selected {
+        border-color: #ec4899;
+        background: #fdf2f8;
+        transform: scale(1.1);
+    }
+
+    .journal-main {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .journal-paper {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        overflow: hidden;
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .paper-header {
+        padding: 1.5rem 1.5rem 0;
+    }
+
+    .title-input {
+        width: 100%;
+        border: none;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1f2937;
+        font-family: inherit;
+        padding: 0.5rem 0;
+        border-bottom: 2px solid #f3f4f6;
+    }
+
+    .title-input:focus {
+        outline: none;
+        border-bottom-color: #ec4899;
+    }
+
+    .title-input::placeholder {
+        color: #d1d5db;
+    }
+
+    .journal-textarea {
+        flex-grow: 1;
+        min-height: 400px;
+        padding: 1.5rem;
+        border: none;
+        font-size: 1.0625rem;
+        line-height: 1.8;
+        color: #374151;
+        font-family: 'Georgia', serif;
+        resize: none;
+        background: repeating-linear-gradient(
+            transparent,
+            transparent 31px,
+            #e5e7eb 31px,
+            #e5e7eb 32px
+        );
+        background-position-y: 8px;
+    }
+
+    .journal-textarea:focus {
+        outline: none;
+    }
+
+    .journal-textarea::placeholder {
+        color: #9ca3af;
+        font-style: italic;
+    }
+
+    .journal-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 0;
+    }
+
+    .autosave-status {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: #6b7280;
+        font-size: 0.875rem;
+    }
+
+    .autosave-status i {
+        color: #10b981;
+    }
+
+    .spinning {
+        animation: spin 1s linear infinite;
+    }
+
+    .action-right {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .clear-btn, .save-btn {
+        padding: 0.75rem 1.5rem;
+        border-radius: 10px;
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .clear-btn {
+        background: white;
+        border: 2px solid #e5e7eb;
+        color: #6b7280;
+    }
+
+    .clear-btn:hover {
+        border-color: #ef4444;
+        color: #ef4444;
+    }
+
+    .save-btn {
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        border: none;
+        color: white;
+    }
+
+    .save-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(236, 72, 153, 0.3);
+    }
+
+    .toast-notification {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        padding: 1rem 1.5rem;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-weight: 500;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        z-index: 1000;
+        animation: slideIn 0.3s ease;
+    }
+
+    .toast-notification.success {
+        background: #10b981;
+        color: white;
+    }
+
+    @@keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    @@keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* AI Feedback Styles */
+    .ai-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1001;
+        padding: 1rem;
+    }
+
+    .ai-feedback-card {
+        background: white;
+        border-radius: 20px;
+        max-width: 500px;
+        width: 100%;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        position: relative;
+        animation: fadeIn 0.3s ease;
+    }
+
+    .close-ai-btn {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255,255,255,0.2);
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        transition: all 200ms;
+    }
+
+    .close-ai-btn:hover {
+        background: rgba(255,255,255,0.3);
+    }
+
+    .ai-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        padding: 3rem;
+        color: #ec4899;
+    }
+
+    .ai-loading i {
+        font-size: 3rem;
+    }
+
+    .ai-loading .spinning {
+        animation: spin 1s linear infinite;
+    }
+
+    .ai-header {
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        color: white;
+        padding: 1.25rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-weight: 600;
+        font-size: 1.125rem;
+    }
+
+    .ai-header i {
+        font-size: 1.5rem;
+    }
+
+    .ai-content {
+        padding: 1.5rem;
+    }
+
+    .ai-content p {
+        margin: 0 0 1.25rem;
+        color: #374151;
+        line-height: 1.7;
+        font-size: 1rem;
+    }
+
+    .ai-recommendation {
+        background: #fdf2f8;
+        padding: 1.25rem;
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .ai-recommendation strong {
+        color: #db2777;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .ai-recommendation span {
+        color: #374151;
+        line-height: 1.6;
+    }
+
+    @@keyframes fadeIn {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
+    }
+
+    @@keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    @@media (max-width: 900px) {
+        .journal-layout {
+            grid-template-columns: 1fr;
+            padding: 1rem;
+        }
+
+        .journal-sidebar {
+            order: 2;
+        }
+
+        .journal-main {
+            order: 1;
+        }
+    }
+</style>

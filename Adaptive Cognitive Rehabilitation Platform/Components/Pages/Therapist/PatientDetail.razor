@@ -1,0 +1,325 @@
+@page "/therapist-patient/{PatientId:int}"
+@using NeuroPath.Models
+@using Microsoft.JSInterop
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+@inject ILogger<PatientDetail> Logger
+
+<div class="container-fluid p-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <button class="btn btn-outline-secondary" @onclick="GoBack">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
+            </button>
+        </div>
+        <h1 class="mb-0"><i class="bi bi-person-heart"></i> Patient Details</h1>
+        <div>
+            <button class="btn btn-primary" @onclick="RefreshData">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="alert alert-info" role="alert">
+            <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
+            Loading patient data...
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-circle"></i> <strong>Error:</strong> @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    @if (patient != null)
+    {
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0"><i class="bi bi-person-circle"></i> Patient Profile</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-sm-6">
+                                <strong>First Name:</strong><br />
+                                <span class="text-muted">@patient.FirstName</span>
+                            </div>
+                            <div class="col-sm-6">
+                                <strong>Last Name:</strong><br />
+                                <span class="text-muted">@patient.LastName</span>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-sm-6">
+                                <strong>Age Group:</strong><br />
+                                <span class="text-muted">@patient.AgeGroup</span>
+                            </div>
+                            <div class="col-sm-6">
+                                <strong>User ID:</strong><br />
+                                <span class="text-muted">@patient.UserId</span>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-sm-12">
+                                <strong>Member Since:</strong><br />
+                                <span class="text-muted">@patient.CreatedDate.ToString("MMM dd, yyyy")</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="card-title mb-0"><i class="bi bi-graph-up"></i> Overall Statistics</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-sm-6">
+                                <div class="text-center">
+                                    <h3 class="text-info">@stats?.TotalSessionsCompleted</h3>
+                                    <small class="text-muted"><i class="bi bi-check-circle"></i> Sessions Completed</small>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="text-center">
+                                    <h3 class="text-warning">@stats?.AverageScore</h3>
+                                    <small class="text-muted"><i class="bi bi-award"></i> Avg Score</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-sm-6">
+                                <div class="text-center">
+                                    <h3 class="text-success">@stats?.BestScore</h3>
+                                    <small class="text-muted"><i class="bi bi-bullseye"></i> Best Score</small>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="text-center">
+                                    <h3 class="text-danger">@stats?.AverageAccuracy.ToString("F1")%</h3>
+                                    <small class="text-muted"><i class="bi bi-percent"></i> Accuracy</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (sessions != null && sessions.Count > 0)
+        {
+            <div class="card shadow-sm">
+                <div class="card-header bg-info text-white">
+                    <h5 class="card-title mb-0"><i class="bi bi-hourglass-split"></i> Recent Sessions (@sessions.Count)</h5>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Game</th>
+                                <th>Duration</th>
+                                <th>Score</th>
+                                <th>Accuracy</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var session in sessions)
+                            {
+                                <tr>
+                                    <td>@session.CreatedAt.ToString("MMM dd, yyyy HH:mm")</td>
+                                    <td>
+                                        <span class="badge bg-secondary">@session.GameType</span>
+                                    </td>
+                                    <td>@GetDurationString(session.TimeStarted, session.TimeCompleted)</td>
+                                    <td>
+                                        <strong>@session.Score</strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark">@session.AccuracyPercentage.ToString("F1")%</span>
+                                    </td>
+                                    <td>
+                                        @if (session.Status == "Completed")
+                                        {
+                                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> Completed</span>
+                                        }
+                                        else if (session.Status == "InProgress")
+                                        {
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> In Progress</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">@session.Status</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+        else if (!isLoading)
+        {
+            <div class="alert alert-info" role="alert">
+                <i class="bi bi-info-circle"></i> No sessions found for this patient.
+            </div>
+        }
+    }
+    else if (!isLoading)
+    {
+        <div class="alert alert-danger" role="alert">
+            <i class="bi bi-exclamation-triangle"></i> <strong>Patient not found.</strong> The requested patient could not be loaded.
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public int PatientId { get; set; }
+
+    private bool isLoading = true;
+    private string? errorMessage;
+    private PatientDetailDto? patient;
+    private PatientStatisticsDto? stats;
+    private List<GameSessionDto>? sessions;
+    private bool hasInitialized = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (!firstRender || hasInitialized)
+            {
+                return;
+            }
+
+            hasInitialized = true;
+            Logger?.LogInformation($"[PATIENT-DETAIL] Initializing for patient {PatientId}");
+            
+            await LoadPatientData();
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"[PATIENT-DETAIL] Error in OnAfterRenderAsync: {ex.Message}");
+        }
+    }
+
+    private async Task LoadPatientData()
+    {
+        try
+        {
+            isLoading = true;
+            Logger?.LogInformation($"[PATIENT-DETAIL] Loading data for patient {PatientId}");
+
+            var baseUrl = NavigationManager.BaseUri;
+            
+            // Load patient statistics
+            var statsResponse = await Http.GetAsync($"{baseUrl}api/therapist/patient/{PatientId}/progress");
+            if (statsResponse.IsSuccessStatusCode)
+            {
+                stats = await statsResponse.Content.ReadFromJsonAsync<PatientStatisticsDto>();
+            }
+            else
+            {
+                Logger?.LogWarning($"[PATIENT-DETAIL] Failed to load stats: {statsResponse.StatusCode}");
+            }
+
+            // Load session history
+            var sessionsResponse = await Http.GetAsync($"{baseUrl}api/therapist/patient/{PatientId}/sessions?limit=50");
+            if (sessionsResponse.IsSuccessStatusCode)
+            {
+                sessions = await sessionsResponse.Content.ReadFromJsonAsync<List<GameSessionDto>>();
+            }
+            else
+            {
+                Logger?.LogWarning($"[PATIENT-DETAIL] Failed to load sessions: {sessionsResponse.StatusCode}");
+            }
+
+            // Create a basic patient detail from stats
+            patient = new PatientDetailDto 
+            { 
+                UserId = PatientId,
+                FirstName = "Patient",
+                LastName = "Name",
+                AgeGroup = "Unknown",
+                CreatedDate = DateTime.UtcNow
+            };
+
+            Logger?.LogInformation($"[PATIENT-DETAIL] Loaded data for patient {PatientId}: {stats?.TotalSessionsCompleted} sessions");
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError($"[PATIENT-DETAIL] Error loading patient data: {ex.Message}");
+            errorMessage = $"Error loading data: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadPatientData();
+    }
+
+    private void GoBack()
+    {
+        NavigationManager.NavigateTo("/therapist-dashboard");
+    }
+
+    private string GetDurationString(DateTime? startTime, DateTime? endTime)
+    {
+        if (startTime == null || endTime == null)
+            return "-";
+
+        var duration = endTime.Value - startTime.Value;
+        if (duration.TotalMinutes < 1)
+            return "< 1 min";
+        else if (duration.TotalHours < 1)
+            return $"{(int)duration.TotalMinutes} min";
+        else
+            return $"{(int)duration.TotalHours}h {duration.Minutes} min";
+    }
+
+    public class PatientDetailDto
+    {
+        public int UserId { get; set; }
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+        public string AgeGroup { get; set; } = "";
+        public DateTime CreatedDate { get; set; }
+    }
+
+    public class PatientStatisticsDto
+    {
+        public int TotalSessionsCompleted { get; set; }
+        public int AverageScore { get; set; }
+        public int BestScore { get; set; }
+        public decimal AverageAccuracy { get; set; }
+    }
+
+    public class GameSessionDto
+    {
+        public int Id { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public string GameType { get; set; } = "";
+        public int Score { get; set; }
+        public decimal AccuracyPercentage { get; set; }
+        public DateTime? TimeStarted { get; set; }
+        public DateTime? TimeCompleted { get; set; }
+        public string Status { get; set; } = "Unknown";
+    }
+}

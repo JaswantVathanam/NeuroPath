@@ -1,0 +1,342 @@
+@page "/child-progress/{childUserId:int}"
+@using NeuroPath.Models
+@using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Components.Web
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+@inject ILogger<ChildProgress> Logger
+
+<div class="container-fluid p-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-0">@(childName != null ? $"{childName}'s Progress" : "Child Progress")</h1>
+            <small class="text-muted">Detailed performance analytics</small>
+        </div>
+        <div>
+            <button class="btn btn-primary" @onclick="RefreshData">
+                <span class="oi oi-reload"></span> Refresh
+            </button>
+            <a href="/parent-dashboard" class="btn btn-secondary ms-2">Back to Dashboard</a>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="alert alert-info" role="alert">
+            <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
+            Loading progress data...
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    @if (childStats != null && !isLoading)
+    {
+        <!-- Overall Statistics Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3 mb-3">
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title text-muted">Games Played</h6>
+                        <h2 class="display-6 mb-0">@childStats.TotalGamesPlayed</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title text-muted">Average Score</h6>
+                        <h2 class="display-6 mb-0">@childStats.AverageScore</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title text-muted">Best Score</h6>
+                        <h2 class="display-6 mb-0">@childStats.BestScore</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title text-muted">Average Accuracy</h6>
+                        <h2 class="display-6 mb-0">@childStats.AverageAccuracy.ToString("F1")%</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Type Statistics -->
+        @if (childStats.GameTypes != null && childStats.GameTypes.Count > 0)
+        {
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">Games by Type</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="list-group list-group-flush">
+                                @foreach (var gameType in childStats.GameTypes.OrderByDescending(x => x.Value))
+                                {
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <span>@gameType.Key</span>
+                                        <span class="badge bg-primary rounded-pill">@gameType.Value games</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">Play Time Statistics</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-6">
+                                    <p class="text-muted mb-1">Total Play Time</p>
+                                    <h5 class="mb-0">@GetPlayTimeDisplay(childStats.TotalPlayTime)</h5>
+                                </div>
+                                <div class="col-6">
+                                    <p class="text-muted mb-1">Avg Session Time</p>
+                                    <h5 class="mb-0">
+                                        @if (childStats.TotalGamesPlayed > 0)
+                                        {
+                                            var avgSeconds = childStats.TotalPlayTime / childStats.TotalGamesPlayed;
+                                            @GetTimeDisplay((int)avgSeconds)
+                                        }
+                                        else
+                                        {
+                                            <text>N/A</text>
+                                        }
+                                    </h5>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Recent Sessions Table -->
+        @if (recentSessions != null && recentSessions.Count > 0)
+        {
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Recent Game Sessions (Last 20)</h5>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Game Type</th>
+                                <th>Difficulty</th>
+                                <th>Score</th>
+                                <th>Accuracy</th>
+                                <th>Duration</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var session in recentSessions.OrderByDescending(s => s.TimeCompleted))
+                            {
+                                <tr>
+                                    <td>@session.TimeCompleted.ToString("MMM dd, HH:mm")</td>
+                                    <td>
+                                        <span class="badge bg-info text-dark">@session.GameType</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary">Level @session.Difficulty</span>
+                                    </td>
+                                    <td>
+                                        <strong>@session.Score</strong>
+                                    </td>
+                                    <td>
+                                        @if (session.Accuracy >= 90)
+                                        {
+                                            <span class="badge bg-success">@session.Accuracy.ToString("F1")%</span>
+                                        }
+                                        else if (session.Accuracy >= 70)
+                                        {
+                                            <span class="badge bg-warning text-dark">@session.Accuracy.ToString("F1")%</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger">@session.Accuracy.ToString("F1")%</span>
+                                        }
+                                    </td>
+                                    <td>@GetTimeDisplay(session.TotalSeconds)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public int ChildUserId { get; set; }
+
+    private bool isLoading = true;
+    private string? errorMessage;
+    private string? childName;
+    private int parentId = 0;
+    private ChildStatisticsDto? childStats;
+    private List<GameSessionDto>? recentSessions;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // Get parent ID from localStorage
+                var parentIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+                if (!string.IsNullOrEmpty(parentIdStr) && int.TryParse(parentIdStr, out var parsedParentId))
+                {
+                    parentId = parsedParentId;
+                    await LoadChildProgressData();
+                }
+                else
+                {
+                    errorMessage = "Parent not authenticated. Please login again.";
+                    isLoading = false;
+                    StateHasChanged();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.LogError($"Error loading parent ID: {ex.Message}");
+                isLoading = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task LoadChildProgressData()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+
+            var baseUrl = NavigationManager.BaseUri;
+
+            // Get child's progress
+            var progressResponse = await Http.GetAsync($"{baseUrl}api/parent/{parentId}/child/{ChildUserId}/progress");
+            if (progressResponse.IsSuccessStatusCode)
+            {
+                childStats = await progressResponse.Content.ReadFromJsonAsync<ChildStatisticsDto>();
+            }
+            else if (progressResponse.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                errorMessage = "You don't have permission to view this child's progress.";
+            }
+            else if (progressResponse.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                errorMessage = "Child not found.";
+            }
+            else
+            {
+                errorMessage = "Failed to load child's progress.";
+            }
+
+            // Get recent sessions
+            if (childStats != null)
+            {
+                var sessionsResponse = await Http.GetAsync($"{baseUrl}api/game/sessions/{ChildUserId}?limit=20");
+                if (sessionsResponse.IsSuccessStatusCode)
+                {
+                    recentSessions = await sessionsResponse.Content.ReadFromJsonAsync<List<GameSessionDto>>();
+                }
+            }
+
+            // Try to load child name (optional)
+            try
+            {
+                childName = await JS.InvokeAsync<string>("localStorage.getItem", $"childName_{ChildUserId}");
+                if (string.IsNullOrEmpty(childName))
+                {
+                    childName = $"Child {ChildUserId}";
+                }
+            }
+            catch
+            {
+                childName = $"Child {ChildUserId}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading child progress: {ex.Message}";
+            Logger?.LogError($"Error loading child progress: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadChildProgressData();
+    }
+
+    private string GetPlayTimeDisplay(long seconds)
+    {
+        if (seconds < 60)
+            return $"{seconds}s";
+        else if (seconds < 3600)
+            return $"{seconds / 60}m {seconds % 60}s";
+        else
+            return $"{seconds / 3600}h {(seconds % 3600) / 60}m";
+    }
+
+    private string GetTimeDisplay(int seconds)
+    {
+        if (seconds < 60)
+            return $"{seconds}s";
+        else if (seconds < 3600)
+            return $"{seconds / 60}m {seconds % 60}s";
+        else
+            return $"{seconds / 3600}h";
+    }
+
+    public class ChildStatisticsDto
+    {
+        public int TotalGamesPlayed { get; set; }
+        public int AverageScore { get; set; }
+        public int BestScore { get; set; }
+        public decimal AverageAccuracy { get; set; }
+        public long TotalPlayTime { get; set; }
+        public Dictionary<string, int> GameTypes { get; set; } = new();
+    }
+
+    public class GameSessionDto
+    {
+        public int SessionId { get; set; }
+        public string GameType { get; set; } = "";
+        public string GameMode { get; set; } = "";
+        public int Difficulty { get; set; }
+        public int Score { get; set; }
+        public decimal Accuracy { get; set; }
+        public int TotalSeconds { get; set; }
+        public DateTime TimeCompleted { get; set; }
+        public string Status { get; set; } = "";
+    }
+}

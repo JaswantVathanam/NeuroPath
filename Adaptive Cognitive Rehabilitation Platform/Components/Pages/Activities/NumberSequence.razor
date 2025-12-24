@@ -1,0 +1,1238 @@
+@page "/activities/number-sequence"
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject ActivityAIAnalysisService AIService
+
+<PageTitle>Number Sequence - NeuroPath</PageTitle>
+
+<div class="activity-container">
+    <div class="activity-header">
+        <button class="back-btn" @onclick="GoBack">
+            <i class="bi bi-arrow-left"></i>
+        </button>
+        <div class="header-info">
+            <h1><i class="bi bi-123"></i> Number Sequence</h1>
+            <p>Find the pattern and complete the sequence</p>
+        </div>
+        <div class="score-display">
+            <div class="score-item">
+                <i class="bi bi-star-fill"></i>
+                <span>@score</span>
+            </div>
+            <div class="score-item">
+                <i class="bi bi-fire"></i>
+                <span>@streak</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="game-area">
+        @if (!gameStarted)
+        {
+            <div class="start-screen">
+                <div class="sequence-icon">
+                    <i class="bi bi-123"></i>
+                </div>
+                <h2>Number Sequence Challenge</h2>
+                <p>Discover patterns and predict the next number!</p>
+
+                <div class="pattern-examples">
+                    <div class="example">
+                        <span class="example-label">Example:</span>
+                        <span class="example-sequence">2, 4, 6, 8, <strong>?</strong></span>
+                        <span class="example-answer">→ 10 (adding 2)</span>
+                    </div>
+                </div>
+
+                <div class="difficulty-selector">
+                    <button class="diff-btn @(difficulty == "easy" ? "selected" : "")" 
+                            @onclick="@(() => difficulty = "easy")">
+                        <i class="bi bi-1-circle"></i>
+                        <span>Easy</span>
+                        <small>Simple patterns</small>
+                    </button>
+                    <button class="diff-btn @(difficulty == "medium" ? "selected" : "")" 
+                            @onclick="@(() => difficulty = "medium")">
+                        <i class="bi bi-2-circle"></i>
+                        <span>Medium</span>
+                        <small>Complex patterns</small>
+                    </button>
+                    <button class="diff-btn @(difficulty == "hard" ? "selected" : "")" 
+                            @onclick="@(() => difficulty = "hard")">
+                        <i class="bi bi-3-circle"></i>
+                        <span>Hard</span>
+                        <small>Multi-step patterns</small>
+                    </button>
+                </div>
+
+                <button class="start-btn" @onclick="StartGame">
+                    <i class="bi bi-play-fill"></i> Start Challenge
+                </button>
+            </div>
+        }
+        else if (gameOver)
+        {
+            <div class="results-screen">
+                <div class="results-icon @(accuracy >= 80 ? "excellent" : accuracy >= 60 ? "good" : "practice")">
+                    <i class="bi @(accuracy >= 80 ? "bi-trophy-fill" : accuracy >= 60 ? "bi-emoji-smile" : "bi-emoji-neutral")"></i>
+                </div>
+                <h2>@(accuracy >= 80 ? "Pattern Master!" : accuracy >= 60 ? "Well Done!" : "Keep Practicing!")</h2>
+
+                <div class="final-stats">
+                    <div class="stat-card">
+                        <i class="bi bi-star-fill"></i>
+                        <span class="stat-value">@score</span>
+                        <span class="stat-label">Points</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="bi bi-check-circle"></i>
+                        <span class="stat-value">@correctAnswers</span>
+                        <span class="stat-label">Correct</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="bi bi-fire"></i>
+                        <span class="stat-value">@maxStreak</span>
+                        <span class="stat-label">Best Streak</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="bi bi-percent"></i>
+                        <span class="stat-value">@accuracy%</span>
+                        <span class="stat-label">Accuracy</span>
+                    </div>
+                </div>
+
+                <!-- AI Feedback Section -->
+                <div class="ai-feedback-section">
+                    @if (isLoadingAIFeedback)
+                    {
+                        <div class="ai-loading">
+                            <i class="bi bi-robot spinning"></i>
+                            <span>AI is analyzing your pattern recognition...</span>
+                        </div>
+                    }
+                    else if (aiAnalysis != null)
+                    {
+                        <div class="ai-feedback">
+                            <div class="ai-header">
+                                <i class="bi bi-robot"></i>
+                                <span>AI Pattern Coach</span>
+                            </div>
+                            <div class="ai-content">
+                                <p>@aiAnalysis.Feedback</p>
+                                @if (!string.IsNullOrEmpty(aiAnalysis.Recommendation))
+                                {
+                                    <div class="ai-recommendation">
+                                        <strong><i class="bi bi-lightbulb"></i> Recommendation:</strong>
+                                        <span>@aiAnalysis.Recommendation</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="result-actions">
+                    <button class="action-btn primary" @onclick="StartGame">
+                        <i class="bi bi-arrow-repeat"></i> Play Again
+                    </button>
+                    <button class="action-btn secondary" @onclick="ResetToMenu">
+                        <i class="bi bi-gear"></i> Change Difficulty
+                    </button>
+                    <button class="action-btn tertiary" @onclick="GoBack">
+                        <i class="bi bi-grid"></i> All Activities
+                    </button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="sequence-area">
+                <div class="round-info">
+                    <span>Round @round of @totalRounds</span>
+                    <div class="timer">
+                        <i class="bi bi-clock"></i>
+                        @timeRemaining s
+                    </div>
+                </div>
+
+                <div class="sequence-card">
+                    <div class="sequence-display">
+                        @foreach (var num in currentSequence)
+                        {
+                            <div class="sequence-number">@num</div>
+                        }
+                        <div class="sequence-number mystery">
+                            <i class="bi bi-question-lg"></i>
+                        </div>
+                    </div>
+
+                    <div class="pattern-hint">
+                        <i class="bi bi-lightbulb"></i>
+                        @patternHint
+                    </div>
+
+                    <div class="answer-options">
+                        @foreach (var option in answerOptions)
+                        {
+                            <button class="option-btn @GetOptionClass(option)"
+                                    @onclick="() => SelectAnswer(option)"
+                                    disabled="@(selectedAnswer.HasValue)">
+                                @option
+                            </button>
+                        }
+                    </div>
+
+                    @if (showFeedback)
+                    {
+                        <div class="feedback @(isCorrect ? "correct" : "incorrect")">
+                            @if (isCorrect)
+                            {
+                                <i class="bi bi-check-circle-fill"></i>
+                                <span>Correct! The pattern was: @patternExplanation</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-x-circle-fill"></i>
+                                <span>The answer was @correctAnswer. Pattern: @patternExplanation</span>
+                            }
+                        </div>
+                    }
+                </div>
+
+                @if (!selectedAnswer.HasValue)
+                {
+                    <button class="skip-btn" @onclick="SkipSequence">
+                        <i class="bi bi-skip-forward"></i> Skip Sequence
+                    </button>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private bool gameStarted = false;
+    private bool gameOver = false;
+    private bool showFeedback = false;
+    private bool isCorrect = false;
+    private string difficulty = "easy";
+    private int score = 0;
+    private int streak = 0;
+    private int maxStreak = 0;
+    private int correctAnswers = 0;
+    private int round = 1;
+    private int totalRounds = 10;
+    private int accuracy = 0;
+    private int timeRemaining = 30;
+    private int? selectedAnswer;
+    private int correctAnswer = 0;
+    private List<int> currentSequence = new();
+    private List<int> answerOptions = new();
+    private string patternHint = "";
+    private string patternExplanation = "";
+    private System.Timers.Timer? gameTimer;
+    private Random random = new();
+    
+    // User info from localStorage
+    private int userId = 0;
+    private string username = "";
+    
+    // AI Analysis variables
+    private ActivityAIResult? aiAnalysis;
+    private bool isLoadingAIFeedback = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var userIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+                var usernameStr = await JS.InvokeAsync<string>("localStorage.getItem", "username");
+                
+                if (!string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out var parsedId))
+                {
+                    userId = parsedId;
+                }
+                username = usernameStr ?? "";
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading user info: {ex.Message}");
+            }
+        }
+    }
+
+    private class ActivityAIResult
+    {
+        public string Feedback { get; set; } = "";
+        public string Recommendation { get; set; } = "";
+        public int CognitiveScore { get; set; }
+        public List<string> StrengthAreas { get; set; } = new();
+        public List<string> ImprovementAreas { get; set; } = new();
+    }
+
+    private class SequencePattern
+    {
+        public string Name { get; set; } = "";
+        public string Hint { get; set; } = "";
+        public Func<int, int, int> Generator { get; set; } = (i, start) => i;
+        public string Explanation { get; set; } = "";
+    }
+
+    private List<SequencePattern> easyPatterns = new()
+    {
+        new SequencePattern 
+        { 
+            Name = "Add 2", 
+            Hint = "Think about even numbers...",
+            Generator = (i, start) => start + i * 2,
+            Explanation = "Add 2 each time"
+        },
+        new SequencePattern 
+        { 
+            Name = "Add 3", 
+            Hint = "Count by threes...",
+            Generator = (i, start) => start + i * 3,
+            Explanation = "Add 3 each time"
+        },
+        new SequencePattern 
+        { 
+            Name = "Add 5", 
+            Hint = "Like counting nickels...",
+            Generator = (i, start) => start + i * 5,
+            Explanation = "Add 5 each time"
+        },
+        new SequencePattern 
+        { 
+            Name = "Add 10", 
+            Hint = "Round numbers...",
+            Generator = (i, start) => start + i * 10,
+            Explanation = "Add 10 each time"
+        },
+        new SequencePattern 
+        { 
+            Name = "Subtract 2", 
+            Hint = "Going down by twos...",
+            Generator = (i, start) => start - i * 2,
+            Explanation = "Subtract 2 each time"
+        }
+    };
+
+    private List<SequencePattern> mediumPatterns = new()
+    {
+        new SequencePattern 
+        { 
+            Name = "Multiply 2", 
+            Hint = "Each number doubles...",
+            Generator = (i, start) => start * (int)Math.Pow(2, i),
+            Explanation = "Multiply by 2 each time"
+        },
+        new SequencePattern 
+        { 
+            Name = "Squares", 
+            Hint = "Perfect squares...",
+            Generator = (i, start) => (i + 1) * (i + 1),
+            Explanation = "Square numbers (1, 4, 9, 16...)"
+        },
+        new SequencePattern 
+        { 
+            Name = "Add increasing", 
+            Hint = "The difference grows...",
+            Generator = (i, start) => start + (i * (i + 1)) / 2,
+            Explanation = "Add 1, then 2, then 3..."
+        },
+        new SequencePattern 
+        { 
+            Name = "Fibonacci-like", 
+            Hint = "Add the previous two...",
+            Generator = (i, start) => i < 2 ? start + i : -1, // Special handling needed
+            Explanation = "Add the two previous numbers"
+        },
+        new SequencePattern 
+        { 
+            Name = "Times 3", 
+            Hint = "Triple each time...",
+            Generator = (i, start) => start * (int)Math.Pow(3, i),
+            Explanation = "Multiply by 3 each time"
+        }
+    };
+
+    private List<SequencePattern> hardPatterns = new()
+    {
+        new SequencePattern 
+        { 
+            Name = "Cubes", 
+            Hint = "Power of three...",
+            Generator = (i, start) => (i + 1) * (i + 1) * (i + 1),
+            Explanation = "Cube numbers (1, 8, 27, 64...)"
+        },
+        new SequencePattern 
+        { 
+            Name = "Prime-like", 
+            Hint = "Only divisible by 1 and itself...",
+            Generator = (i, start) => -1, // Special primes array
+            Explanation = "Prime numbers"
+        },
+        new SequencePattern 
+        { 
+            Name = "Alternating add/subtract", 
+            Hint = "The pattern alternates...",
+            Generator = (i, start) => i % 2 == 0 ? start + (i / 2) * 5 : start + (i / 2) * 5 - 2,
+            Explanation = "Add 5, subtract 2, add 5, subtract 2..."
+        },
+        new SequencePattern 
+        { 
+            Name = "Triangular", 
+            Hint = "Stack numbers like a pyramid...",
+            Generator = (i, start) => (i + 1) * (i + 2) / 2,
+            Explanation = "Triangular numbers (1, 3, 6, 10, 15...)"
+        }
+    };
+
+    private int[] primeNumbers = { 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47 };
+
+    private void StartGame()
+    {
+        gameStarted = true;
+        gameOver = false;
+        score = 0;
+        streak = 0;
+        maxStreak = 0;
+        correctAnswers = 0;
+        round = 1;
+        
+        GenerateSequence();
+        StartTimer();
+    }
+
+    private void GenerateSequence()
+    {
+        selectedAnswer = null;
+        showFeedback = false;
+        currentSequence.Clear();
+        answerOptions.Clear();
+        timeRemaining = difficulty switch { "easy" => 30, "medium" => 25, _ => 20 };
+
+        var patterns = difficulty switch
+        {
+            "easy" => easyPatterns,
+            "medium" => mediumPatterns,
+            _ => hardPatterns
+        };
+
+        var pattern = patterns[random.Next(patterns.Count)];
+        patternHint = pattern.Hint;
+        patternExplanation = pattern.Explanation;
+
+        var start = random.Next(1, 10);
+
+        // Generate sequence based on pattern type
+        if (pattern.Name == "Fibonacci-like")
+        {
+            currentSequence.Add(1);
+            currentSequence.Add(1);
+            for (int i = 2; i < 5; i++)
+            {
+                currentSequence.Add(currentSequence[i - 1] + currentSequence[i - 2]);
+            }
+            correctAnswer = currentSequence[3] + currentSequence[4];
+        }
+        else if (pattern.Name == "Prime-like")
+        {
+            var startIdx = random.Next(0, 5);
+            for (int i = 0; i < 5; i++)
+            {
+                currentSequence.Add(primeNumbers[startIdx + i]);
+            }
+            correctAnswer = primeNumbers[startIdx + 5];
+        }
+        else
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                currentSequence.Add(pattern.Generator(i, start));
+            }
+            correctAnswer = pattern.Generator(5, start);
+        }
+
+        // Generate answer options
+        answerOptions.Add(correctAnswer);
+        var wrongAnswers = new HashSet<int>();
+        while (wrongAnswers.Count < 3)
+        {
+            var wrongAnswer = correctAnswer + random.Next(-10, 11);
+            if (wrongAnswer != correctAnswer && !wrongAnswers.Contains(wrongAnswer))
+            {
+                wrongAnswers.Add(wrongAnswer);
+            }
+        }
+        answerOptions.AddRange(wrongAnswers);
+        answerOptions = answerOptions.OrderBy(x => random.Next()).ToList();
+    }
+
+    private void StartTimer()
+    {
+        gameTimer?.Stop();
+        gameTimer?.Dispose();
+
+        gameTimer = new System.Timers.Timer(1000);
+        gameTimer.Elapsed += async (s, e) =>
+        {
+            if (selectedAnswer.HasValue) return;
+
+            timeRemaining--;
+            
+            if (timeRemaining <= 0)
+            {
+                await InvokeAsync(() =>
+                {
+                    ShowResult(false);
+                });
+            }
+            
+            await InvokeAsync(StateHasChanged);
+        };
+        gameTimer.Start();
+    }
+
+    private async void SelectAnswer(int answer)
+    {
+        if (selectedAnswer.HasValue) return;
+
+        selectedAnswer = answer;
+        isCorrect = answer == correctAnswer;
+        ShowResult(isCorrect);
+    }
+
+    private async void ShowResult(bool correct)
+    {
+        gameTimer?.Stop();
+        showFeedback = true;
+        isCorrect = correct;
+
+        if (correct)
+        {
+            correctAnswers++;
+            streak++;
+            if (streak > maxStreak) maxStreak = streak;
+            
+            var timeBonus = timeRemaining;
+            var difficultyMultiplier = difficulty switch { "easy" => 1, "medium" => 2, _ => 3 };
+            score += (10 + timeBonus) * difficultyMultiplier + (streak * 5);
+        }
+        else
+        {
+            streak = 0;
+        }
+
+        StateHasChanged();
+        await Task.Delay(2500);
+
+        round++;
+        if (round > totalRounds)
+        {
+            await EndGame();
+        }
+        else
+        {
+            GenerateSequence();
+            StartTimer();
+        }
+        StateHasChanged();
+    }
+
+    private async Task SkipSequence()
+    {
+        gameTimer?.Stop();
+        round++;
+        streak = 0;
+        
+        if (round > totalRounds)
+        {
+            await EndGame();
+        }
+        else
+        {
+            GenerateSequence();
+            StartTimer();
+        }
+    }
+
+    private async Task EndGame()
+    {
+        gameOver = true;
+        gameTimer?.Stop();
+        accuracy = totalRounds > 0 ? (int)((double)correctAnswers / totalRounds * 100) : 0;
+        await SaveActivitySession();
+        await LoadAIFeedback();
+    }
+
+    private async Task LoadAIFeedback()
+    {
+        isLoadingAIFeedback = true;
+        StateHasChanged();
+
+        try
+        {
+            var session = new AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession
+            {
+                UserId = 1,
+                ActivityType = "NumberSequence",
+                StartTime = DateTime.UtcNow.AddMinutes(-10),
+                EndTime = DateTime.UtcNow,
+                DurationSeconds = 600,
+                Score = score,
+                Accuracy = accuracy,
+                Difficulty = difficulty,
+                ActivityData = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    totalRounds,
+                    correctAnswers,
+                    maxStreak,
+                    patternTypes = "Mixed",
+                    averageTimePerQuestion = 30 - timeRemaining
+                })
+            };
+
+            var result = await AIService.AnalyzeActivityPerformanceAsync(session, new List<AdaptiveCognitiveRehabilitationPlatform.Models.ActivitySession>());
+            aiAnalysis = new ActivityAIResult
+            {
+                Feedback = result.Encouragement,
+                Recommendation = result.PatternAnalysis,
+                CognitiveScore = 0,
+                StrengthAreas = result.CognitiveStrengths,
+                ImprovementAreas = result.AreasForGrowth
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"AI analysis error: {ex.Message}");
+            aiAnalysis = new ActivityAIResult
+            {
+                Feedback = accuracy >= 80 
+                    ? "Outstanding pattern recognition! You quickly identified the mathematical sequences." 
+                    : accuracy >= 60 
+                    ? "Good pattern skills! You're developing strong logical thinking abilities." 
+                    : "Keep practicing! Pattern recognition improves mathematical reasoning.",
+                Recommendation = maxStreak >= 5 
+                    ? "Your streak shows excellent concentration. Try harder patterns next!" 
+                    : "Focus on looking at the differences between consecutive numbers."
+            };
+        }
+        finally
+        {
+            isLoadingAIFeedback = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveActivitySession()
+    {
+        try
+        {
+            var activityData = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                sequencesCompleted = round - 1,
+                totalSequences = totalRounds,
+                correctPatterns = correctAnswers,
+                sequenceTypes = "Mixed",
+                maxSequenceLength = 5
+            });
+
+            var request = new
+            {
+                userId = userId,
+                username = username,
+                activityType = "NumberSequence",
+                activityName = "Number Sequence",
+                durationSeconds = 0,
+                score = score,
+                accuracy = (decimal)accuracy,
+                completionPercentage = 100,
+                difficulty = difficulty,
+                activityData = activityData,
+                moodBefore = "",
+                moodAfter = ""
+            };
+
+            var apiUrl = $"{Navigation.BaseUri}api/activities/save";
+            await Http.PostAsJsonAsync(apiUrl, request);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving activity: {ex.Message}");
+        }
+    }
+
+    private void ResetToMenu()
+    {
+        gameStarted = false;
+        gameOver = false;
+        gameTimer?.Stop();
+    }
+
+    private string GetOptionClass(int option)
+    {
+        if (!selectedAnswer.HasValue) return "";
+        if (option == correctAnswer) return "correct";
+        if (option == selectedAnswer && !isCorrect) return "incorrect";
+        return "faded";
+    }
+
+    private void GoBack()
+    {
+        gameTimer?.Stop();
+        gameTimer?.Dispose();
+        Navigation.NavigateTo("/games");
+    }
+
+    public void Dispose()
+    {
+        gameTimer?.Stop();
+        gameTimer?.Dispose();
+    }
+}
+
+<style>
+    .activity-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+    }
+
+    .activity-header {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+        padding: 1.5rem 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .back-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        border: 2px solid rgba(255,255,255,0.3);
+        background: rgba(255,255,255,0.1);
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        transition: all 200ms;
+    }
+
+    .back-btn:hover {
+        background: rgba(255,255,255,0.2);
+    }
+
+    .header-info {
+        flex-grow: 1;
+    }
+
+    .header-info h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .header-info p {
+        margin: 0.25rem 0 0;
+        opacity: 0.9;
+        font-size: 0.9rem;
+    }
+
+    .score-display {
+        display: flex;
+        gap: 1rem;
+    }
+
+    .score-item {
+        background: rgba(255,255,255,0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 1.125rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .game-area {
+        max-width: 650px;
+        margin: 2rem auto;
+        padding: 0 1.5rem;
+    }
+
+    .start-screen, .results-screen {
+        background: white;
+        border-radius: 24px;
+        padding: 2.5rem;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+
+    .sequence-icon, .results-icon {
+        width: 100px;
+        height: 100px;
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 3rem;
+        color: white;
+    }
+
+    .results-icon.excellent {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+
+    .results-icon.good {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+
+    .results-icon.practice {
+        background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+    }
+
+    .start-screen h2, .results-screen h2 {
+        margin: 0 0 0.5rem;
+        font-size: 1.75rem;
+        color: #1f2937;
+    }
+
+    .start-screen > p {
+        color: #6b7280;
+        margin-bottom: 2rem;
+    }
+
+    .pattern-examples {
+        background: #f0f9ff;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .example {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .example-label {
+        color: #6b7280;
+    }
+
+    .example-sequence {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .example-answer {
+        color: #4f46e5;
+        font-weight: 600;
+    }
+
+    .difficulty-selector {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: center;
+        margin-bottom: 2rem;
+    }
+
+    .diff-btn {
+        padding: 1rem 1.5rem;
+        background: #f9fafb;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 200ms;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .diff-btn:hover {
+        border-color: #6366f1;
+        background: #eef2ff;
+    }
+
+    .diff-btn.selected {
+        border-color: #6366f1;
+        background: #eef2ff;
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2);
+    }
+
+    .diff-btn i {
+        font-size: 1.5rem;
+        color: #6366f1;
+    }
+
+    .diff-btn span {
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .diff-btn small {
+        font-size: 0.75rem;
+        color: #6b7280;
+    }
+
+    .start-btn {
+        padding: 1rem 3rem;
+        font-size: 1.25rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+        border: none;
+        border-radius: 16px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        transition: all 300ms;
+    }
+
+    .start-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 30px rgba(99, 102, 241, 0.4);
+    }
+
+    .sequence-area {
+        text-align: center;
+    }
+
+    .round-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        color: #4338ca;
+        font-weight: 600;
+    }
+
+    .timer {
+        background: white;
+        padding: 0.5rem 1rem;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    .sequence-card {
+        background: white;
+        border-radius: 24px;
+        padding: 2rem;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        margin-bottom: 1rem;
+    }
+
+    .sequence-display {
+        display: flex;
+        justify-content: center;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .sequence-number {
+        width: 60px;
+        height: 60px;
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.5rem;
+        font-weight: 700;
+        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+    }
+
+    .sequence-number.mystery {
+        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+        animation: pulse 1.5s infinite;
+    }
+
+    .pattern-hint {
+        background: #fef3c7;
+        padding: 1rem;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        color: #92400e;
+    }
+
+    .pattern-hint i {
+        color: #f59e0b;
+    }
+
+    .answer-options {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .option-btn {
+        padding: 1.25rem;
+        background: #f9fafb;
+        border: 3px solid #e5e7eb;
+        border-radius: 14px;
+        font-family: inherit;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1f2937;
+        cursor: pointer;
+        transition: all 200ms;
+    }
+
+    .option-btn:hover:not(:disabled) {
+        border-color: #6366f1;
+        background: #eef2ff;
+        transform: scale(1.02);
+    }
+
+    .option-btn:disabled {
+        cursor: default;
+    }
+
+    .option-btn.correct {
+        border-color: #10b981;
+        background: #ecfdf5;
+        color: #047857;
+    }
+
+    .option-btn.incorrect {
+        border-color: #ef4444;
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+    .option-btn.faded {
+        opacity: 0.5;
+    }
+
+    .feedback {
+        padding: 1rem;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        font-weight: 600;
+        margin-top: 1rem;
+    }
+
+    .feedback.correct {
+        background: #ecfdf5;
+        color: #047857;
+    }
+
+    .feedback.incorrect {
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+    .feedback i {
+        font-size: 1.25rem;
+    }
+
+    .skip-btn {
+        width: 100%;
+        padding: 0.875rem;
+        background: transparent;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        color: #6b7280;
+        font-family: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .skip-btn:hover {
+        border-color: #9ca3af;
+        color: #374151;
+    }
+
+    .final-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin: 2rem 0;
+    }
+
+    .stat-card {
+        background: #f9fafb;
+        border-radius: 16px;
+        padding: 1.25rem;
+    }
+
+    .stat-card i {
+        font-size: 1.5rem;
+        color: #6366f1;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-card .stat-value {
+        display: block;
+        font-size: 2rem;
+        font-weight: 800;
+        color: #1f2937;
+    }
+
+    .stat-card .stat-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .result-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .action-btn {
+        padding: 1rem;
+        border-radius: 12px;
+        font-family: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 200ms;
+    }
+
+    .action-btn.primary {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+        border: none;
+    }
+
+    .action-btn.primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(99, 102, 241, 0.3);
+    }
+
+    .action-btn.secondary {
+        background: #eef2ff;
+        color: #4338ca;
+        border: none;
+    }
+
+    .action-btn.tertiary {
+        background: white;
+        border: 2px solid #e5e7eb;
+        color: #6b7280;
+    }
+
+    @@keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
+
+    /* AI Feedback Styles */
+    .ai-feedback-section {
+        margin: 1.5rem 0;
+    }
+
+    .ai-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        padding: 1.5rem;
+        background: #eef2ff;
+        border-radius: 12px;
+        color: #4338ca;
+    }
+
+    .ai-loading .spinning {
+        animation: spin 1s linear infinite;
+    }
+
+    .ai-feedback {
+        background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+        border: 1px solid #c7d2fe;
+        border-radius: 16px;
+        overflow: hidden;
+    }
+
+    .ai-header {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+        padding: 0.75rem 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+    }
+
+    .ai-content {
+        padding: 1.25rem;
+    }
+
+    .ai-content p {
+        margin: 0 0 1rem;
+        color: #4338ca;
+        line-height: 1.6;
+    }
+
+    .ai-recommendation {
+        background: white;
+        padding: 1rem;
+        border-radius: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .ai-recommendation strong {
+        color: #4f46e5;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .ai-recommendation span {
+        color: #374151;
+    }
+
+    @@keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    @@media (max-width: 640px) {
+        .sequence-number {
+            width: 50px;
+            height: 50px;
+            font-size: 1.25rem;
+        }
+    }
+</style>

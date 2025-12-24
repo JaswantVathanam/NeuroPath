@@ -1,0 +1,224 @@
+@page "/my-children"
+@using NeuroPath.Models
+@using Microsoft.JSInterop
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+@inject ILogger<MyChildren> Logger
+
+<div class="container-fluid p-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-0">My Children</h1>
+            <small class="text-muted">Manage and monitor your children's learning progress</small>
+        </div>
+        <button class="btn btn-primary" @onclick="RefreshData">
+            <span class="oi oi-reload"></span> Refresh
+        </button>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="alert alert-info">
+            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+            Loading your children...
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    @if (children != null && children.Count > 0)
+    {
+        <div class="row">
+            @foreach (var child in children)
+            {
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="card-title mb-0">@child.FirstName @child.LastName</h5>
+                            <small>Added on @child.CreatedDate.ToString("MMM dd, yyyy")</small>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <p class="mb-2"><strong>Age Group:</strong> @child.AgeGroup</p>
+                                <p class="mb-0"><strong>Status:</strong> <span class="badge bg-success">Active</span></p>
+                            </div>
+                            <hr />
+                            <div class="row text-center mb-3">
+                                <div class="col-6">
+                                    <h6 class="text-muted">Total Sessions</h6>
+                                    <h4>@(childStats.ContainsKey(child.UserId) ? childStats[child.UserId].TotalGamesPlayed : 0)</h4>
+                                </div>
+                                <div class="col-6">
+                                    <h6 class="text-muted">Avg Score</h6>
+                                    <h4>@(childStats.ContainsKey(child.UserId) ? childStats[child.UserId].AverageScore : "-")</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-light d-grid gap-2">
+                            <a href="@($"/child-progress/{child.UserId}")" class="btn btn-sm btn-primary">
+                                <span class="oi oi-bar-chart"></span> View Progress
+                            </a>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="@(() => RemoveChild(child.UserId))">
+                                <span class="oi oi-x"></span> Remove
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else if (!isLoading && (children == null || children.Count == 0))
+    {
+        <div class="alert alert-info text-center py-5">
+            <h5 class="mb-3">No children linked yet</h5>
+            <p class="mb-0">Start by inviting your child to create an account or linking an existing account.</p>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isLoading = true;
+    private string? errorMessage;
+    private int parentId = 0;
+    private List<ChildProfileDto>? children;
+    private Dictionary<int, ChildStatisticsDto> childStats = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var parentIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+                if (!string.IsNullOrEmpty(parentIdStr) && int.TryParse(parentIdStr, out var parsedParentId))
+                {
+                    parentId = parsedParentId;
+                    await LoadChildren();
+                }
+                else
+                {
+                    errorMessage = "Please login to view your children.";
+                    isLoading = false;
+                    StateHasChanged();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.LogError($"Error: {ex.Message}");
+                isLoading = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task LoadChildren()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            var baseUrl = NavigationManager.BaseUri;
+
+            var response = await Http.GetAsync($"{baseUrl}api/parent/{parentId}/children");
+            if (response.IsSuccessStatusCode)
+            {
+                children = await response.Content.ReadFromJsonAsync<List<ChildProfileDto>>();
+
+                if (children != null && children.Count > 0)
+                {
+                    // Load stats for all children in parallel with timeout
+                    var tasks = children.Select(async child =>
+                    {
+                        try
+                        {
+                            using (var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5)))
+                            {
+                                var statsResponse = await Http.GetAsync($"{baseUrl}api/game/sessions/{child.UserId}?limit=50", cts.Token);
+                                if (statsResponse.IsSuccessStatusCode)
+                                {
+                                    var sessions = await statsResponse.Content.ReadFromJsonAsync<List<GameSessionDto>>(cancellationToken: cts.Token);
+                                    if (sessions?.Count > 0)
+                                    {
+                                        return new { child, stats = new ChildStatisticsDto 
+                                        { 
+                                            TotalGamesPlayed = sessions.Count,
+                                            AverageScore = (int)sessions.Average(s => s.Score)
+                                        }};
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger?.LogError($"Error loading stats for child {child.UserId}: {ex.Message}");
+                        }
+                        return null;
+                    }).ToList();
+
+                    var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+                    
+                    foreach (var result in results.Where(r => r != null))
+                    {
+                        childStats[result!.child.UserId] = result!.stats;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading children: {ex.Message}";
+            Logger?.LogError(ex.Message);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RemoveChild(int childId)
+    {
+        // TODO: Implement remove child endpoint
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "Are you sure you want to remove this child?");
+        if (confirmed)
+        {
+            errorMessage = "Feature coming soon.";
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadChildren();
+    }
+
+    public class ChildProfileDto
+    {
+        public int UserId { get; set; }
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+        public string AgeGroup { get; set; } = "";
+        public DateTime CreatedDate { get; set; }
+    }
+
+    public class ChildStatisticsDto
+    {
+        public int TotalGamesPlayed { get; set; }
+        public int AverageScore { get; set; }
+    }
+
+    public class GameSessionDto
+    {
+        public int SessionId { get; set; }
+        public string GameType { get; set; } = "";
+        public int Score { get; set; }
+        public decimal Accuracy { get; set; }
+        public int TotalSeconds { get; set; }
+    }
+}

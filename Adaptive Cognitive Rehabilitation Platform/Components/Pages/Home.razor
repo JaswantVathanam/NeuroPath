@@ -1,0 +1,553 @@
+@page "/"
+@rendermode InteractiveServer
+
+<PageTitle>NeuroPath - Cognitive Rehabilitation with AI</PageTitle>
+
+<main class="home-page">
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1>Cognitive Rehabilitation Made Intelligent</h1>
+            <p>
+                Personalized brain training powered by AI. Adapt to your unique rehabilitation journey 
+                with real-time difficulty adjustment using Phi-4 SLM technology.
+            </p>
+            <div class="hero-buttons">
+                <a href="/games/memory-match" class="btn btn-lg btn-white">
+                    <i class="bi bi-play-fill"></i> Start Training
+                </a>
+                <a href="/about" class="btn btn-lg btn-outline">
+                    <i class="bi bi-info-circle"></i> Learn More
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="section section-alt">
+        <div class="section-header">
+            <h2>Why Choose NeuroPath?</h2>
+            <p>Advanced cognitive training with intelligent AI-powered personalization</p>
+        </div>
+        
+        <div class="grid grid-cols-3">
+            <!-- Feature 1 -->
+            <div class="card card-feature">
+                <div class="card-icon">
+                    <i class="bi bi-robot"></i>
+                </div>
+                <div class="card-header">
+                    <h3 class="card-title">AI-Powered</h3>
+                </div>
+                <div class="card-content">
+                    <p>Real-time difficulty adjustment using Phi-4 AI. Our system learns your strengths and adapts challenges perfectly.</p>
+                </div>
+            </div>
+
+            <!-- Feature 2 -->
+            <div class="card card-feature">
+                <div class="card-icon">
+                    <i class="bi bi-graph-up"></i>
+                </div>
+                <div class="card-header">
+                    <h3 class="card-title">Track Progress</h3>
+                </div>
+                <div class="card-content">
+                    <p>Comprehensive analytics show your improvement over time. Watch cognitive metrics improve as you progress through levels.</p>
+                </div>
+            </div>
+
+            <!-- Feature 3 -->
+            <div class="card card-feature">
+                <div class="card-icon">
+                    <i class="bi bi-shield-lock"></i>
+                </div>
+                <div class="card-header">
+                    <h3 class="card-title">Privacy First</h3>
+                </div>
+                <div class="card-content">
+                    <p>Your data stays private. All processing happens locally. No data sent to external servers.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Games Section -->
+    <section class="section">
+        <div class="section-header">
+            <h2>Train Your Cognitive Skills</h2>
+            <p>Three comprehensive games targeting different cognitive domains</p>
+        </div>
+
+        <div class="grid grid-cols-3">
+            <!-- Memory Match Game -->
+            <div class="card game-card">
+                <div class="game-card-image">
+                    <div class="game-icon memory-icon">
+                        <i class="bi bi-collection"></i>
+                    </div>
+                </div>
+                <div class="card-header">
+                    <h3 class="card-title">Memory Match</h3>
+                    <span class="badge badge-primary">Working Memory</span>
+                </div>
+                <div class="card-content">
+                    <p>Test and improve your working memory. Match cards while the difficulty adapts to your skill level. Progressive challenges keep your mind sharp.</p>
+                    <div class="game-stats">
+                        <div class="stat">
+                            <i class="bi bi-lightning-charge"></i>
+                            <span>Improves focus</span>
+                        </div>
+                        <div class="stat">
+                            <i class="bi bi-graph-up"></i>
+                            <span>Real-time difficulty</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <a href="/games/memory-match" class="btn btn-primary btn-block">
+                        <i class="bi bi-play-circle"></i> Play Now
+                    </a>
+                </div>
+            </div>
+
+            <!-- Reaction Trainer Game -->
+            <div class="card game-card">
+                <div class="game-card-image">
+                    <div class="game-icon reaction-icon">
+                        <i class="bi bi-lightning"></i>
+                    </div>
+                </div>
+                <div class="card-header">
+                    <h3 class="card-title">Reaction Trainer</h3>
+                    <span class="badge badge-success">Motor Skills</span>
+                </div>
+                <div class="card-content">
+                    <p>Sharpen your reflexes and reaction time. Quick, engaging challenges measure your speed and consistency. Perfect for motor control rehabilitation.</p>
+                    <div class="game-stats">
+                        <div class="stat">
+                            <i class="bi bi-rocket"></i>
+                            <span>Reflexes training</span>
+                        </div>
+                        <div class="stat">
+                            <i class="bi bi-hourglass-split"></i>
+                            <span>Speed tracking</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <a href="/games/reaction-trainer" class="btn btn-primary btn-block">
+                        <i class="bi bi-play-circle"></i> Play Now
+                    </a>
+                </div>
+            </div>
+
+            <!-- Sorting Task Game -->
+            <div class="card game-card">
+                <div class="game-card-image">
+                    <div class="game-icon sorting-icon">
+                        <i class="bi bi-diagram-3"></i>
+                    </div>
+                </div>
+                <div class="card-header">
+                    <h3 class="card-title">Sorting Task</h3>
+                    <span class="badge badge-warning">Cognition</span>
+                </div>
+                <div class="card-content">
+                    <p>Exercise cognitive processing and categorization skills. Sort items quickly and accurately. Challenge your ability to recognize patterns and organize information.</p>
+                    <div class="game-stats">
+                        <div class="stat">
+                            <i class="bi bi-shuffle"></i>
+                            <span>Categorization</span>
+                        </div>
+                        <div class="stat">
+                            <i class="bi bi-puzzle"></i>
+                            <span>Logic training</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <a href="/games/sorting-task" class="btn btn-primary btn-block">
+                        <i class="bi bi-play-circle"></i> Play Now
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Cognitive Domains Section -->
+    <section class="section section-alt">
+        <div class="section-header">
+            <h2>Comprehensive Cognitive Coverage</h2>
+            <p>Our games target key cognitive domains important for rehabilitation</p>
+        </div>
+
+        <div class="grid grid-cols-4">
+            <div class="domain-card">
+                <div class="domain-icon">
+                    <i class="bi bi-brain"></i>
+                </div>
+                <h4>Memory</h4>
+                <p>Working and long-term memory exercises</p>
+            </div>
+            <div class="domain-card">
+                <div class="domain-icon">
+                    <i class="bi bi-flash"></i>
+                </div>
+                <h4>Reaction</h4>
+                <p>Motor control and reflex training</p>
+            </div>
+            <div class="domain-card">
+                <div class="domain-icon">
+                    <i class="bi bi-gear"></i>
+                </div>
+                <h4>Processing</h4>
+                <p>Speed and accuracy optimization</p>
+            </div>
+            <div class="domain-card">
+                <div class="domain-icon">
+                    <i class="bi bi-eye"></i>
+                </div>
+                <h4>Attention</h4>
+                <p>Focus and concentration building</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="section">
+        <div class="section-header">
+            <h2>How NeuroPath Works</h2>
+            <p>Smart adaptation powered by AI</p>
+        </div>
+
+        <div class="how-it-works">
+            <div class="step">
+                <div class="step-number">1</div>
+                <h3>Play Games</h3>
+                <p>Choose any cognitive training game and start playing. Each game tracks your performance metrics in real-time.</p>
+            </div>
+
+            <div class="step-arrow">
+                <i class="bi bi-arrow-right"></i>
+            </div>
+
+            <div class="step">
+                <div class="step-number">2</div>
+                <h3>AI Analyzes</h3>
+                <p>Phi-4 AI analyzes your performance, identifying strengths and areas for improvement. Understanding your cognitive patterns.</p>
+            </div>
+
+            <div class="step-arrow">
+                <i class="bi bi-arrow-right"></i>
+            </div>
+
+            <div class="step">
+                <div class="step-number">3</div>
+                <h3>Difficulty Adapts</h3>
+                <p>Game difficulty automatically adjusts to match your ability. Not too easy to bore, not too hard to frustrate.</p>
+            </div>
+
+            <div class="step-arrow">
+                <i class="bi bi-arrow-right"></i>
+            </div>
+
+            <div class="step">
+                <div class="step-number">4</div>
+                <h3>Track Progress</h3>
+                <p>Monitor your improvement over time with detailed analytics and personalized insights from our AI system.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- AI Technology Section -->
+    <section class="section section-alt">
+        <div class="section-header">
+            <h2>Powered by Phi-4 AI</h2>
+            <p>Advanced local AI for personalized cognitive rehabilitation</p>
+        </div>
+
+        <div class="grid grid-cols-2">
+            <div class="tech-feature">
+                <h3><i class="bi bi-cpu"></i> Local Processing</h3>
+                <p>
+                    All AI processing happens locally on your device using Phi-4, Microsoft's efficient 14B parameter 
+                    language model. Your data never leaves your computer.
+                </p>
+            </div>
+
+            <div class="tech-feature">
+                <h3><i class="bi bi-lightning-fill"></i> Real-Time Adaptation</h3>
+                <p>
+                    Phi-4 analyzes your performance patterns instantly, providing personalized difficulty recommendations 
+                    that keep your brain in the optimal learning zone.
+                </p>
+            </div>
+
+            <div class="tech-feature">
+                <h3><i class="bi bi-shield-check"></i> Privacy & Security</h3>
+                <p>
+                    Your cognitive data is yours alone. No cloud uploads, no tracking, no external APIs. 
+                    Complete privacy for sensitive health information.
+                </p>
+            </div>
+
+            <div class="tech-feature">
+                <h3><i class="bi bi-gear-fill"></i> Intelligent Insights</h3>
+                <p>
+                    Beyond difficulty adjustment, Phi-4 provides clinical insights about your cognitive patterns, 
+                    potential areas of concern, and personalized recommendations.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <div class="cta-content">
+            <h2>Ready to Start Your Rehabilitation Journey?</h2>
+            <p>Begin with any game and experience AI-powered cognitive training today.</p>
+            <div class="cta-buttons">
+                <a href="/games/memory-match" class="btn btn-lg btn-white">
+                    <i class="bi bi-play-fill"></i> Start Playing
+                </a>
+                <a href="/about" class="btn btn-lg btn-outline">
+                    Learn More
+                </a>
+            </div>
+        </div>
+    </section>
+</main>
+
+<style>
+    .home-page {
+        background-color: var(--bg-primary);
+    }
+
+    /* Games Section Styles */
+    .game-card {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+
+    .game-card-image {
+        width: 100%;
+        height: 150px;
+        background: linear-gradient(135deg, var(--gray-100), var(--bg-secondary));
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: -var(--spacing-lg) -var(--spacing-lg) var(--spacing-lg) -var(--spacing-lg);
+    }
+
+    .game-icon {
+        width: 80px;
+        height: 80px;
+        border-radius: var(--radius-lg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+    }
+
+    .memory-icon {
+        background: linear-gradient(135deg, #6366f1, #818cf8);
+    }
+
+    .reaction-icon {
+        background: linear-gradient(135deg, #06b6d4, #22d3ee);
+    }
+
+    .sorting-icon {
+        background: linear-gradient(135deg, #f59e0b, #fbbf24);
+    }
+
+    .game-stats {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-sm);
+        margin-top: var(--spacing-md);
+    }
+
+    .stat {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-sm);
+        color: var(--gray-600);
+        font-size: 0.9rem;
+    }
+
+    .stat i {
+        color: var(--primary);
+    }
+
+    /* Domain Cards */
+    .domain-card {
+        background: var(--bg-primary);
+        border: 1px solid var(--gray-200);
+        border-radius: var(--radius-lg);
+        padding: var(--spacing-xl);
+        text-align: center;
+        transition: all var(--transition-base);
+    }
+
+    .domain-card:hover {
+        border-color: var(--primary);
+        box-shadow: var(--shadow-lg);
+        transform: translateY(-4px);
+    }
+
+    .domain-icon {
+        width: 60px;
+        height: 60px;
+        background: linear-gradient(135deg, var(--primary-light), var(--secondary-light));
+        border-radius: var(--radius-lg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: var(--primary);
+        margin: 0 auto var(--spacing-md) auto;
+    }
+
+    .domain-card h4 {
+        color: var(--dark);
+        margin-bottom: var(--spacing-sm);
+    }
+
+    .domain-card p {
+        font-size: 0.9rem;
+        margin: 0;
+    }
+
+    /* How It Works Section */
+    .how-it-works {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--spacing-lg);
+        flex-wrap: wrap;
+    }
+
+    .step {
+        flex: 1;
+        min-width: 200px;
+        text-align: center;
+    }
+
+    .step-number {
+        width: 60px;
+        height: 60px;
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: white;
+        margin: 0 auto var(--spacing-lg) auto;
+    }
+
+    .step h3 {
+        margin-bottom: var(--spacing-sm);
+    }
+
+    .step p {
+        font-size: 0.95rem;
+        margin: 0;
+    }
+
+    .step-arrow {
+        font-size: 1.5rem;
+        color: var(--primary);
+    }
+
+    @@media (max-width: 1024px) {
+        .how-it-works {
+            flex-direction: column;
+        }
+
+        .step-arrow {
+            transform: rotate(90deg);
+        }
+    }
+
+    /* Tech Features */
+    .tech-feature {
+        background: var(--bg-secondary);
+        padding: var(--spacing-2xl);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--gray-200);
+    }
+
+    .tech-feature h3 {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-md);
+        color: var(--primary);
+        margin-bottom: var(--spacing-md);
+    }
+
+    .tech-feature i {
+        font-size: 1.5rem;
+    }
+
+    .tech-feature p {
+        margin: 0;
+        font-size: 0.95rem;
+    }
+
+    /* CTA Section */
+    .cta-section {
+        background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+        color: white;
+        padding: calc(var(--spacing-3xl) * 1.5) var(--spacing-xl);
+        text-align: center;
+        margin-top: var(--spacing-3xl);
+    }
+
+    .cta-content {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .cta-content h2 {
+        font-size: 2.5rem;
+        margin-bottom: var(--spacing-md);
+        color: white;
+    }
+
+    .cta-content p {
+        font-size: 1.1rem;
+        margin-bottom: var(--spacing-2xl);
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .cta-buttons {
+        display: flex;
+        gap: var(--spacing-md);
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    /* Responsive */
+    @@media (max-width: 768px) {
+        .grid-cols-4 {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .game-icon {
+            width: 60px;
+            height: 60px;
+            font-size: 1.5rem;
+        }
+
+        .cta-content h2 {
+            font-size: 1.875rem;
+        }
+    }
+</style>
