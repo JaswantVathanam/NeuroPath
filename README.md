@@ -155,8 +155,8 @@ private const string LM_STUDIO_ENDPOINT = "http://localhost:1234/v1/chat/complet
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/neuropath-cognitive-rehabilitation.git
-   cd neuropath-cognitive-rehabilitation
+   git clone https://github.com/JaswantVathanam/NeuroPath.git
+   cd NeuroPath/Adaptive\ Cognitive\ Rehabilitation\ Platform
    ```
 
 2. **Install dependencies**
