@@ -232,11 +232,6 @@ Special thanks to our supervisors and mentors for their invaluable guidance:
 - **The Open Source Community** - For the libraries and tools that made this possible
 - **Healthcare Professionals** - For domain expertise and validation
 
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
