@@ -105,7 +105,7 @@ The platform currently uses **LM Studio** to host the **Microsoft Phi-4** langua
 
 ### Flexible AI Backend
 
-> **Important:** While we currently use LM Studio with Phi-4, the platform is designed to work with **any compatible SLM (Small Language Model) or LLM (Large Language Model)**!
+> **Important:** While we currently use LM Studio with Phi-4, the platform is designed to work with **any compatible SLM (Small Language Model) or LLM (Large Language Model)**
 
 You can use:
 
