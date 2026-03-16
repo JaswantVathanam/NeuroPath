@@ -218,7 +218,7 @@ I'm very grateful to acknowledge the dedicated team members who contributed to t
 
 Special thanks to my mentor for his invaluable guidance:
 
-- **Dr. M. Rajasekaran / Associate Professor** - Academic Supervisor
+- **Dr. M. Rajasekaran / Associate Professor** - Academic Supervisor (https://github.com/Rajasekaran-Aravinthkumar)
 
 
 </div>
