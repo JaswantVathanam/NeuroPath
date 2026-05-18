@@ -149,7 +149,7 @@ private const string LM_STUDIO_ENDPOINT = "http://localhost:1234/v1/chat/complet
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - [LM Studio](https://lmstudio.ai/) or compatible AI backend
-- [Visual Studio 2022](https://visualstudio.microsoft.com/) or [VS Code](https://code.visualstudio.com/)
+- [Visual Studio 2022/2026](https://visualstudio.microsoft.com/) or [VS Code](https://code.visualstudio.com/)
 
 ### Quick Start
 
